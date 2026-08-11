@@ -37,6 +37,12 @@ html, body {
   width: 260px;
 }
 
+.category-tile {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+  width: 150px;
+}
+
 /* Auto-sliding "Explore Every Category" carousel on the Home page */
 .category-slider-viewport {
   overflow: hidden;

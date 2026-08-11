@@ -612,10 +612,38 @@ async function processBulkFile(file) {
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    // Normalizes a header/cell for comparison: lowercase, trim, and
+    // strip all spaces/punctuation, so "Product Name", "product_name",
+    // "PRODUCT-NAME" and "ProductName" are all treated as identical.
+    const normalizeHeader = (s) => (s === null || s === undefined ? '' : s.toString()).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const NAME_ALIASES = ['name', 'product', 'productname', 'part', 'partname', 'item', 'itemname', 'title', 'partdescription'];
+    const PRICE_ALIASES = ['price', 'sellingprice', 'unitprice', 'cost', 'amount', 'rate', 'retailprice'];
+
+    // Some real-world spreadsheets have a title/logo row (or a blank
+    // row) above the actual column headers. Scan the first several
+    // rows for the first one that looks like a real header row — i.e.
+    // it has a cell matching a Name alias AND a cell matching a Price
+    // alias — and use that as the header row instead of always
+    // assuming row 1 is it.
+    const rawGrid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (rawGrid.length === 0) {
+      alert('That file has no rows to import.');
+      return;
+    }
+    let headerRowIndex = 0;
+    for (let i = 0; i < Math.min(10, rawGrid.length); i++) {
+      const normCells = (rawGrid[i] || []).map(normalizeHeader);
+      const hasName = normCells.some(c => NAME_ALIASES.includes(c));
+      const hasPrice = normCells.some(c => PRICE_ALIASES.includes(c));
+      if (hasName && hasPrice) { headerRowIndex = i; break; }
+    }
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { range: headerRowIndex, defval: '' });
 
     if (rows.length === 0) {
-      alert('That file has no rows to import.');
+      alert('That file has a header row but no data rows underneath it to import.');
       return;
     }
 
@@ -638,9 +666,9 @@ async function processBulkFile(file) {
     CATEGORIES.forEach(c => { canonicalCategoryByLower[c.toLowerCase()] = c; });
 
     const getField = (row, ...names) => {
+      const normNames = names.map(normalizeHeader);
       for (const key of Object.keys(row)) {
-        const cleanKey = key.trim().toLowerCase();
-        if (names.some(n => n.toLowerCase() === cleanKey)) {
+        if (normNames.includes(normalizeHeader(key))) {
           const v = row[key];
           return typeof v === 'string' ? v.trim() : v;
         }
@@ -648,15 +676,38 @@ async function processBulkFile(file) {
       return '';
     };
 
+    // Strips currency symbols, thousands separators, and stray text
+    // from a price cell (e.g. "KES 6,000", "Ksh. 6000/=", " 6000 ")
+    // down to a plain number. Returns NaN if nothing numeric is left.
+    const parsePrice = (raw) => {
+      if (raw === '' || raw === null || raw === undefined) return NaN;
+      if (typeof raw === 'number') return raw;
+      const cleaned = raw.toString().replace(/[^0-9.\-]/g, '');
+      return cleaned === '' ? NaN : Number(cleaned);
+    };
+
     const toImport = [];
     const skipped = [];
 
     rows.forEach((row, i) => {
-      const name = getField(row, 'Name', 'Product', 'Product Name', 'Part', 'Part Name');
-      const priceRaw = getField(row, 'Price', 'Selling Price');
+      const name = getField(row, 'Name', 'Product', 'Product Name', 'Part', 'Part Name', 'Item', 'Item Name', 'Title');
+      const priceRaw = getField(row, 'Price', 'Selling Price', 'Unit Price', 'Cost', 'Amount', 'Rate', 'Retail Price');
+      const price = parsePrice(priceRaw);
 
-      if (!name || priceRaw === '' || priceRaw === undefined) {
-        skipped.push(`Row ${i + 2}: missing Name or Price`);
+      if (!name && (priceRaw === '' || priceRaw === undefined)) {
+        skipped.push(`Row ${i + headerRowIndex + 2}: this row looks empty (no name or price found)`);
+        return;
+      }
+      if (!name) {
+        skipped.push(`Row ${i + headerRowIndex + 2}: missing a product name`);
+        return;
+      }
+      if (priceRaw === '' || priceRaw === undefined) {
+        skipped.push(`Row ${i + headerRowIndex + 2} ("${name}"): missing a price`);
+        return;
+      }
+      if (isNaN(price)) {
+        skipped.push(`Row ${i + headerRowIndex + 2} ("${name}"): price "${priceRaw}" isn't a valid number`);
         return;
       }
 
@@ -678,16 +729,21 @@ async function processBulkFile(file) {
         category = canonicalCategoryByLower[rawCategory.toLowerCase()];
         subcategory = rawSubcategory || '';
       } else if (rawCategory) {
-        // Category cell has a value, but it's not one we recognize —
-        // skip rather than silently mis-file it.
-        skipped.push(`Row ${i + 2} ("${name}"): category "${rawCategory}" doesn't match any existing category`);
-        return;
+        // Category cell has a value, but it's not one we recognize.
+        // Rather than silently dropping the whole row, file it under
+        // whatever was picked above the upload button and keep going —
+        // a mismatched category shouldn't block a valid product import.
+        category = defaultCategory;
+        subcategory = rawSubcategory || defaultSubcategory;
       } else {
         // Nothing usable in the row itself — fall back to whatever
         // was picked above the upload button.
         category = defaultCategory;
         subcategory = rawSubcategory || defaultSubcategory;
       }
+
+      const originalPriceRaw = getField(row, 'OriginalPrice', 'Original Price');
+      const originalPrice = parsePrice(originalPriceRaw);
 
       let image = getField(row, 'Image', 'Image URL', 'Photo', 'Picture');
       if (!image && embeddedIndex < embeddedImageUrls.length) {
@@ -698,8 +754,8 @@ async function processBulkFile(file) {
       toImport.push({
         name,
         brand: getField(row, 'Brand', 'Make', 'Manufacturer'),
-        price: Number(priceRaw),
-        originalPrice: getField(row, 'OriginalPrice', 'Original Price') || null,
+        price,
+        originalPrice: isNaN(originalPrice) ? null : originalPrice,
         category,
         subcategory,
         description: getField(row, 'Description', 'Details'),
@@ -708,7 +764,14 @@ async function processBulkFile(file) {
     });
 
     if (toImport.length === 0) {
-      alert('No rows could be imported. ' + (skipped[0] || ''));
+      const headers = Object.keys(rows[0] || {});
+      alert(
+        'No rows could be imported.\n\n' +
+        (skipped[0] || '') +
+        (skipped.length > 1 ? `\n(and ${skipped.length - 1} more similar issue${skipped.length - 1 === 1 ? '' : 's'})` : '') +
+        `\n\nColumns detected in your file: ${headers.length ? headers.join(', ') : '(none found)'}\n\n` +
+        'Make sure your file has a column for the product name (e.g. "Name") and a column for the price (e.g. "Price"), with the header text in the very first row of data.'
+      );
       return;
     }
 
