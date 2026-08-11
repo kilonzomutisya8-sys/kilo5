@@ -62,17 +62,22 @@ function renderHeader(activePage) {
     return `<a href="${l.href}" class="text-sm font-semibold transition ${isActive ? 'text-red-500' : 'text-slate-300 hover:text-white'}">${l.label}</a>`;
   }).join('');
 
+  const mobileLinks = NAV_LINKS.map(l => {
+    const isActive = l.href === activePage;
+    return `<a href="${l.href}" class="block text-lg font-bold py-3 px-2 rounded-lg transition ${isActive ? 'text-red-500 bg-slate-900' : 'text-slate-200 hover:text-white hover:bg-slate-900'}">${l.label}</a>`;
+  }).join('');
+
   return `
   <header class="sticky top-0 z-40 bg-slate-950 border-b border-slate-800 shadow-md">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-          <div class="flex items-center gap-8 min-w-0">
-              <a href="index.html" class="flex items-center space-x-3 shrink-0">
-                  <div class="bg-red-600 text-white p-2 rounded-lg font-black text-xl tracking-wider">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-3 md:gap-8 min-w-0">
+              <a href="index.html" class="flex items-center space-x-3 shrink-0 min-w-0">
+                  <div class="bg-red-600 text-white p-2 rounded-lg font-black text-xl tracking-wider shrink-0">
                       <i class="fa-solid fa-car-wrench"></i>
                   </div>
-                  <div>
-                      <span class="text-lg sm:text-xl font-bold tracking-tight text-white block leading-tight">KILO AUTO SPARES LTD</span>
-                      <span class="text-xs text-red-500 font-semibold tracking-widest uppercase">Garage & Spares</span>
+                  <div class="min-w-0">
+                      <span class="text-base sm:text-xl font-bold tracking-tight text-white block leading-tight truncate">KILO AUTO SPARES LTD</span>
+                      <span class="text-xs text-red-500 font-semibold tracking-widest uppercase truncate block">Garage & Spares</span>
                   </div>
               </a>
 
@@ -81,7 +86,7 @@ function renderHeader(activePage) {
               </nav>
           </div>
 
-          <div class="flex items-center space-x-3 shrink-0">
+          <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
               <a href="${waLink('Hello, I would like to confirm availability for auto parts at Witu Rd Brunei House.')}" target="_blank" rel="noopener" class="hidden lg:inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition">
                   <i class="fa-brands fa-whatsapp text-base"></i>
                   <span>Chat on WhatsApp</span>
@@ -97,14 +102,14 @@ function renderHeader(activePage) {
           </div>
       </div>
 
+      <nav id="mobileMenu" class="md:hidden hidden border-t border-slate-800 bg-slate-950 px-4 py-3 flex flex-col space-y-1">
+          ${mobileLinks}
+      </nav>
+
       <!-- Search bar: on every page, this is the only way to find products -->
       <div class="border-t border-slate-800 bg-slate-900/60 px-4 sm:px-6 lg:px-8 py-3">
           <div class="max-w-3xl mx-auto">${renderSearchBar('Header')}</div>
       </div>
-
-      <nav id="mobileMenu" class="md:hidden hidden border-t border-slate-800 bg-slate-950 px-4 py-3 flex flex-col space-y-3">
-          ${links}
-      </nav>
   </header>`;
 }
 
