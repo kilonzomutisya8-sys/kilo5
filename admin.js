@@ -17,6 +17,8 @@ const ADMIN_SESSION_KEY = 'kilo_admin_session';
 
 let allProducts = [];
 let selectedImageFile = null;
+let bulkPhotoFile = null;
+let bulkPhotoSelectedIds = new Set();
 
 /* ---------- Login ---------- */
 
@@ -80,6 +82,45 @@ async function initAdmin() {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) { applyImageFile(file); e.preventDefault(); }
+        return;
+      }
+    }
+  });
+
+  document.getElementById('bpCategory').addEventListener('change', updateBulkPhotoSubcategoryOptions);
+  document.getElementById('bpSubcategory').addEventListener('change', renderBulkPhotoProductList);
+  document.getElementById('bpSearch').addEventListener('input', renderBulkPhotoProductList);
+  document.getElementById('bpProductList').addEventListener('change', e => {
+    const checkbox = e.target.closest('input[type="checkbox"][data-product-id]');
+    if (!checkbox) return;
+    const id = Number(checkbox.dataset.productId);
+    if (checkbox.checked) bulkPhotoSelectedIds.add(id);
+    else bulkPhotoSelectedIds.delete(id);
+    updateBulkPhotoMatchCount();
+  });
+  document.getElementById('bpImageFile').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) applyBulkImageFile(file);
+  });
+  document.getElementById('bpImageUrl').addEventListener('input', e => {
+    if (bulkPhotoFile) return; // a picked file takes priority in the preview
+    const url = e.target.value.trim();
+    if (url) {
+      document.getElementById('bpImagePreview').src = url;
+      document.getElementById('bpImagePreview').classList.remove('hidden');
+    }
+  });
+  setupDropZone(document.getElementById('bpImageDropZone'), files => {
+    const file = [...files].find(f => f.type.startsWith('image/'));
+    if (file) applyBulkImageFile(file);
+  });
+  document.getElementById('bulkPhotoModal').addEventListener('paste', e => {
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) { applyBulkImageFile(file); e.preventDefault(); }
         return;
       }
     }
@@ -310,6 +351,189 @@ async function deleteProductClick(id) {
   }
 }
 window.deleteProductClick = deleteProductClick;
+
+/* ---------- Bulk apply one photo to a whole subcategory ---------- */
+/*
+   Lets you upload (or paste/link) a single photo and stamp it onto
+   every product currently in a chosen subcategory — e.g. you don't
+   have individual photos for each "Coil Springs" listing yet, so you
+   apply one generic coil-spring photo to all of them at once.
+
+   You can always come back later, open a specific product with the
+   pencil icon in the table, and upload/paste a photo just for that
+   one — a normal single-product edit always overrides whatever the
+   bulk tool set, and re-running the bulk tool with a new photo
+   simply overwrites again (there's nothing separate to "delete" —
+   uploading a new photo, either in bulk or on one product, replaces
+   the old one).
+*/
+
+function openBulkPhotoModal() {
+  bulkPhotoFile = null;
+  bulkPhotoSelectedIds = new Set();
+  document.getElementById('bpImagePreview').classList.add('hidden');
+  document.getElementById('bpImagePreview').src = '';
+  document.getElementById('bpImageUrl').value = '';
+  document.getElementById('bpImageFile').value = '';
+  document.getElementById('bpSearch').value = '';
+  populateBulkPhotoCategorySelect();
+  updateBulkPhotoSubcategoryOptions();
+  document.getElementById('bulkPhotoModal').classList.remove('hidden');
+}
+window.openBulkPhotoModal = openBulkPhotoModal;
+
+function closeBulkPhotoModal() {
+  document.getElementById('bulkPhotoModal').classList.add('hidden');
+}
+window.closeBulkPhotoModal = closeBulkPhotoModal;
+
+function populateBulkPhotoCategorySelect() {
+  const select = document.getElementById('bpCategory');
+  if (select.dataset.populated) return;
+  CATEGORIES.forEach(cat => {
+    select.insertAdjacentHTML('beforeend', `<option value="${cat}">${cat}</option>`);
+  });
+  select.dataset.populated = '1';
+}
+
+// The subcategory dropdown is built from the subcategory values that
+// actually exist on your live products right now (not just the master
+// CATEGORY_STRUCTURE list) — so it always lines up exactly with what's
+// in the database, even if a product's subcategory text is a little
+// off from the canonical spelling. This is just a FILTER now — it
+// narrows which products show up below, it doesn't apply the photo
+// to a whole subcategory by itself. You still tick the exact products
+// you want (5, 10, 20, or any number) in the checklist underneath.
+function updateBulkPhotoSubcategoryOptions() {
+  const cat = document.getElementById('bpCategory').value;
+  const select = document.getElementById('bpSubcategory');
+
+  const subsSet = new Set();
+  allProducts.forEach(p => {
+    if (!p.subcategory) return;
+    if (cat !== 'all' && p.category !== cat) return;
+    subsSet.add(p.subcategory);
+  });
+  const subs = [...subsSet].sort();
+
+  select.innerHTML = '<option value="all">All Subcategories</option>' +
+    subs.map(s => `<option value="${s.replace(/"/g, '&quot;')}">${s}</option>`).join('');
+  renderBulkPhotoProductList();
+}
+
+// Products currently visible in the checklist based on the
+// Category / Subcategory / Search filters — NOT the same as which
+// products are selected to receive the photo.
+function bulkPhotoFilteredProducts() {
+  const cat = document.getElementById('bpCategory').value;
+  const sub = document.getElementById('bpSubcategory').value;
+  const q = document.getElementById('bpSearch').value.trim().toLowerCase();
+
+  return allProducts.filter(p => {
+    if (cat !== 'all' && p.category !== cat) return false;
+    if (sub !== 'all' && p.subcategory !== sub) return false;
+    if (q) {
+      const haystack = `${p.name} ${p.brand || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// Renders the checklist of filtered products. Selection state
+// (bulkPhotoSelectedIds) persists across re-filtering, so you can
+// narrow the list, tick a few, narrow again, and tick more — the
+// earlier ticks stay checked even once they scroll out of view.
+function renderBulkPhotoProductList() {
+  const listEl = document.getElementById('bpProductList');
+  const filtered = bulkPhotoFilteredProducts();
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<p class="text-xs text-slate-500 p-4 text-center">No products match these filters.</p>`;
+  } else {
+    listEl.innerHTML = filtered.map(p => `
+      <label class="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/60 cursor-pointer">
+        <input type="checkbox" data-product-id="${p.id}" ${bulkPhotoSelectedIds.has(p.id) ? 'checked' : ''} class="w-4 h-4 accent-emerald-600 shrink-0">
+        <img src="${p.image}" alt="" class="w-9 h-9 rounded object-cover bg-slate-800 border border-slate-700 shrink-0">
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs text-white truncate">${p.brand ? p.brand + ' — ' : ''}${p.name}</span>
+          <span class="block text-[11px] text-slate-500 truncate">${p.subcategory || p.category}</span>
+        </span>
+      </label>
+    `).join('');
+  }
+
+  updateBulkPhotoMatchCount();
+}
+
+function bulkPhotoSelectAllVisible() {
+  bulkPhotoFilteredProducts().forEach(p => bulkPhotoSelectedIds.add(p.id));
+  renderBulkPhotoProductList();
+}
+window.bulkPhotoSelectAllVisible = bulkPhotoSelectAllVisible;
+
+function bulkPhotoClearSelection() {
+  bulkPhotoSelectedIds.clear();
+  renderBulkPhotoProductList();
+}
+window.bulkPhotoClearSelection = bulkPhotoClearSelection;
+
+function bulkPhotoMatches() {
+  return allProducts.filter(p => bulkPhotoSelectedIds.has(p.id));
+}
+
+function updateBulkPhotoMatchCount() {
+  const countEl = document.getElementById('bpMatchCount');
+  const count = bulkPhotoSelectedIds.size;
+  countEl.textContent = count > 0
+    ? `This will set the photo on the ${count} product${count === 1 ? '' : 's'} you've selected.`
+    : 'Tick the products above that should get this photo.';
+}
+
+function applyBulkImageFile(file) {
+  bulkPhotoFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('bpImagePreview').src = ev.target.result;
+    document.getElementById('bpImagePreview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function applyBulkPhoto() {
+  const urlInput = document.getElementById('bpImageUrl').value.trim();
+  if (!bulkPhotoFile && !urlInput) { alert('Add a photo — upload a file, drag one in, paste it, or paste an image URL.'); return; }
+
+  const matches = bulkPhotoMatches();
+  if (matches.length === 0) { alert('Tick at least one product in the list first.'); return; }
+
+  if (!confirm(`Set this photo on the ${matches.length} selected product${matches.length === 1 ? '' : 's'}? This replaces their current photos.`)) return;
+
+  const btn = document.getElementById('bpApplyBtn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Applying...';
+
+  try {
+    // Upload once, reuse the same resulting URL for every matching product.
+    let imageUrl = urlInput;
+    if (bulkPhotoFile) {
+      imageUrl = await sbUploadImage(bulkPhotoFile);
+    }
+
+    await Promise.all(matches.map(p => sbUpdateProduct(p.id, { ...p, image: imageUrl })));
+
+    await refreshProducts();
+    closeBulkPhotoModal();
+    alert(`Done — updated the photo on ${matches.length} selected product${matches.length === 1 ? '' : 's'}.`);
+  } catch (err) {
+    alert('Could not apply this photo to the selected products.\n\n' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+window.applyBulkPhoto = applyBulkPhoto;
 
 /* ---------- Export backup ---------- */
 

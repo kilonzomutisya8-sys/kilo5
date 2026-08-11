@@ -66,6 +66,9 @@
                 <button onclick="openProductModal()" class="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
                     <i class="fa-solid fa-plus"></i> Add Product
                 </button>
+                <button onclick="openBulkPhotoModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
+                    <i class="fa-solid fa-images"></i> Bulk Photo to Selected Products
+                </button>
                 <button onclick="exportProducts()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
                     <i class="fa-solid fa-file-export"></i> Export Backup (JSON)
                 </button>
@@ -189,6 +192,77 @@
                         <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg transition">Save Product</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Apply Photo to Selected Products Modal -->
+    <div id="bulkPhotoModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeBulkPhotoModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-slate-950 border border-slate-800 rounded-xl w-full max-w-lg my-8">
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white">Bulk Apply Photo to Selected Products</h2>
+                    <button onclick="closeBulkPhotoModal()" class="text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <p class="text-xs text-slate-500">Upload one photo, then tick exactly which products should get it — pick 5, 10, 20, or any number you like. This means products in the same subcategory can still each have their own photo; use the filters below just to narrow the list down, then check the ones you want.</p>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Category</label>
+                            <select id="bpCategory" class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 outline-none transition">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Subcategory</label>
+                            <select id="bpSubcategory" class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 outline-none transition">
+                                <option value="all">All Subcategories</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Search</label>
+                        <input type="text" id="bpSearch" placeholder="Narrow the list by name or brand..." class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Pick Products *</label>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="bulkPhotoSelectAllVisible()" class="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300">Select all shown</button>
+                                <span class="text-slate-700">|</span>
+                                <button type="button" onclick="bulkPhotoClearSelection()" class="text-[11px] font-semibold text-slate-400 hover:text-white">Clear selection</button>
+                            </div>
+                        </div>
+                        <div id="bpProductList" class="max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg divide-y divide-slate-800"></div>
+                        <p id="bpMatchCount" class="text-xs text-slate-500 min-h-[1rem] mt-2"></p>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Photo to Apply</label>
+                        <div id="bpImageDropZone" class="mt-1 flex items-center gap-4 border-2 border-dashed border-slate-700 rounded-lg p-3 transition">
+                            <img id="bpImagePreview" src="" class="w-20 h-20 rounded-lg object-cover bg-slate-900 border border-slate-700 hidden">
+                            <div class="flex-1 space-y-2">
+                                <label class="w-full text-xs text-slate-400 flex flex-col gap-1 cursor-pointer">
+                                    <span class="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition w-fit">
+                                        <i class="fa-solid fa-upload"></i> Drag a photo here, click to browse, or paste (Ctrl+V)
+                                    </span>
+                                    <input type="file" id="bpImageFile" accept="image/*" class="hidden">
+                                </label>
+                                <p class="text-xs text-slate-600">or paste an image URL below</p>
+                                <input type="text" id="bpImageUrl" placeholder="https://..." class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-red-500 outline-none transition">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="closeBulkPhotoModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-lg transition">Cancel</button>
+                        <button type="button" id="bpApplyBtn" onclick="applyBulkPhoto()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition">Apply Photo</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
