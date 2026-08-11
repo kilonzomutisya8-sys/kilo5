@@ -65,21 +65,23 @@ function renderHeader(activePage) {
   return `
   <header class="sticky top-0 z-40 bg-slate-950 border-b border-slate-800 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
-          <a href="index.html" class="flex items-center space-x-3 shrink-0">
-              <div class="bg-red-600 text-white p-2 rounded-lg font-black text-xl tracking-wider">
-                  <i class="fa-solid fa-car-wrench"></i>
-              </div>
-              <div>
-                  <span class="text-lg sm:text-xl font-bold tracking-tight text-white block leading-tight">KILO AUTO SPARES LTD</span>
-                  <span class="text-xs text-red-500 font-semibold tracking-widest uppercase">Garage & Spares</span>
-              </div>
-          </a>
+          <div class="flex items-center gap-8 min-w-0">
+              <a href="index.html" class="flex items-center space-x-3 shrink-0">
+                  <div class="bg-red-600 text-white p-2 rounded-lg font-black text-xl tracking-wider">
+                      <i class="fa-solid fa-car-wrench"></i>
+                  </div>
+                  <div>
+                      <span class="text-lg sm:text-xl font-bold tracking-tight text-white block leading-tight">KILO AUTO SPARES LTD</span>
+                      <span class="text-xs text-red-500 font-semibold tracking-widest uppercase">Garage & Spares</span>
+                  </div>
+              </a>
 
-          <nav class="hidden md:flex items-center space-x-6">
-              ${links}
-          </nav>
+              <nav class="hidden md:flex items-center space-x-6">
+                  ${links}
+              </nav>
+          </div>
 
-          <div class="flex items-center space-x-3">
+          <div class="flex items-center space-x-3 shrink-0">
               <a href="${waLink('Hello, I would like to confirm availability for auto parts at Witu Rd Brunei House.')}" target="_blank" rel="noopener" class="hidden lg:inline-flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition">
                   <i class="fa-brands fa-whatsapp text-base"></i>
                   <span>Chat on WhatsApp</span>

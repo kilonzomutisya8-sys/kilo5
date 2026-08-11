@@ -1,3 +1,12 @@
+/* Stops the page from scrolling/bleeding sideways on phones —
+   any element that's ever slightly wider than the screen (long
+   text, an animation, an absolutely-positioned badge, etc.) gets
+   clipped at the edge instead of pushing the whole page out. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 @keyframes marquee {
   0% { transform: translateX(100%); }
   100% { transform: translateX(-100%); }
