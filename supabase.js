@@ -115,6 +115,33 @@ async function sbDeleteProduct(id) {
   await sbRequest(`/products?id=eq.${id}`, { method: 'DELETE' });
 }
 
+/* ---------- Site settings (e.g. show/hide prices) ---------- */
+
+// Single row (id = 1) holding site-wide toggles. If the row or
+// table doesn't exist yet (before SUPABASE_SETUP.md's site_settings
+// step has been run), this safely defaults to "show prices" so the
+// site behaves exactly as before until the admin sets it up.
+async function sbGetShowPrices() {
+  try {
+    const rows = await sbRequest('/site_settings?select=show_prices&id=eq.1');
+    if (rows && rows.length > 0 && rows[0].show_prices !== null && rows[0].show_prices !== undefined) {
+      return rows[0].show_prices !== false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Could not load the show-prices setting — defaulting to showing prices.', e);
+    return true;
+  }
+}
+
+async function sbSetShowPrices(value) {
+  await sbRequest('/site_settings?id=eq.1', {
+    method: 'PATCH',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify({ show_prices: !!value })
+  });
+}
+
 /* ---------- Storage (product photo uploads) ---------- */
 
 // Uploads a File object the admin picked from their computer and

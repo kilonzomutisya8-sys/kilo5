@@ -73,7 +73,39 @@ insert into products (name, brand, category, subcategory, price, original_price,
 ('195/65R15 Car Tyre','Petromax','Tyres',null,7000,7800,'https://images.unsplash.com/photo-1553440569-bcc63803a83d?w=600&q=80','Reliable all-round tyre size 195/65R15, price inclusive of professional fitment.');
 ```
 
-## 2. Create the image storage bucket (for Admin photo uploads)
+## 2. Create the `site_settings` table (for the Show/Hide Prices toggle)
+
+This powers the **Prices** toggle button in Admin, which lets you hide
+prices from visitors on the live site (Home, Shop, Quick View, Cart,
+and the WhatsApp messages) while you can still see real prices in
+Admin at all times. In the SQL Editor, run:
+
+```sql
+create table if not exists site_settings (
+  id bigint primary key,
+  show_prices boolean not null default true
+);
+
+insert into site_settings (id, show_prices) values (1, true)
+on conflict (id) do nothing;
+
+alter table site_settings enable row level security;
+
+create policy "Public can read site settings"
+  on site_settings for select
+  using (true);
+
+create policy "Public can write site settings"
+  on site_settings for all
+  using (true)
+  with check (true);
+```
+
+Until this table exists, the site simply defaults to showing prices
+as normal — nothing breaks, the Admin toggle just won't have anywhere
+to save its setting.
+
+## 3. Create the image storage bucket (for Admin photo uploads)
 
 Only needed if you plan to upload photos from your computer in
 Admin (as opposed to always pasting an image link). In the SQL
@@ -93,7 +125,7 @@ create policy "Public can upload product images"
   with check (bucket_id = 'product-images');
 ```
 
-## 3. Upload the site files
+## 4. Upload the site files
 
 Upload every file in this folder to your GitHub repo root (same
 flat structure as before — no subfolders):
@@ -110,7 +142,7 @@ You no longer need `products-data.json` — the site reads live
 from Supabase now. You can delete it from the repo, or leave it,
 it's simply unused.
 
-## 4. Try it
+## 5. Try it
 
 1. Open your live site — Home and Shop should show the products
    you just inserted in step 1.
@@ -123,6 +155,10 @@ it's simply unused.
    `Description`, `Image` (a photo link).
 4. Refresh Home/Shop in another tab — the change should already
    be there.
+5. Try the **Prices** toggle button in the Admin toolbar, then
+   refresh Home/Shop in another tab — prices should disappear
+   (replaced with "Contact for Price") when it's off, while Admin
+   itself keeps showing real prices at all times.
 
 ## A note on security
 

@@ -130,7 +130,61 @@ async function initAdmin() {
     adminInitialized = true;
   }
   await refreshProducts();
+  await initPricesToggle();
 }
+
+/* ---------- Show/Hide Prices toggle ---------- */
+// Controls a single site_settings row that every visitor-facing page
+// reads (via loadProducts() in products.js). This admin table always
+// shows real prices no matter what this is set to — the toggle only
+// hides prices from visitors on Home/Shop/Quick View/Cart/WhatsApp.
+
+let currentShowPrices = true;
+
+async function initPricesToggle() {
+  const btn = document.getElementById('pricesToggleBtn');
+  try {
+    currentShowPrices = await sbGetShowPrices();
+  } catch (e) {
+    currentShowPrices = true;
+  }
+  renderPricesToggle();
+  btn.disabled = false;
+}
+
+function renderPricesToggle() {
+  const btn = document.getElementById('pricesToggleBtn');
+  const icon = document.getElementById('pricesToggleIcon');
+  const label = document.getElementById('pricesToggleLabel');
+  if (currentShowPrices) {
+    btn.classList.remove('bg-red-600/20', 'border-red-500/40', 'text-red-300');
+    btn.classList.add('bg-emerald-600/20', 'border-emerald-500/40', 'text-emerald-300');
+    icon.className = 'fa-solid fa-eye';
+    label.textContent = 'Prices: Visible to Visitors';
+  } else {
+    btn.classList.remove('bg-emerald-600/20', 'border-emerald-500/40', 'text-emerald-300');
+    btn.classList.add('bg-red-600/20', 'border-red-500/40', 'text-red-300');
+    icon.className = 'fa-solid fa-eye-slash';
+    label.textContent = 'Prices: Hidden From Visitors';
+  }
+}
+
+async function togglePricesVisibility() {
+  const btn = document.getElementById('pricesToggleBtn');
+  const next = !currentShowPrices;
+  btn.disabled = true;
+  try {
+    await sbSetShowPrices(next);
+    currentShowPrices = next;
+    renderPricesToggle();
+    invalidateProductsCache();
+  } catch (e) {
+    alert('Could not update the prices setting. If this is the first time you\'re using this, make sure the site_settings table has been created — see SUPABASE_SETUP.md.\n\n' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+window.togglePricesVisibility = togglePricesVisibility;
 
 function populateCategorySelects() {
   const filterSelect = document.getElementById('adminCategoryFilter');

@@ -4,7 +4,7 @@
    clipped at the edge instead of pushing the whole page out. */
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 @keyframes marquee {

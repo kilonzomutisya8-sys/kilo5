@@ -13,13 +13,6 @@
     <div id="topBars"></div>
     <div id="siteHeader"></div>
 
-    <section class="bg-slate-950 border-b border-slate-800 py-10 px-4">
-        <div class="max-w-7xl mx-auto">
-            <h1 class="text-3xl sm:text-4xl font-black text-white mb-2">Shop Our Parts Catalogue</h1>
-            <p class="text-slate-400 text-sm max-w-2xl">Search for any part by name, brand, or system — the search bar above finds it instantly. Walk in anytime, or reach us on WhatsApp if you'd like to check something first.</p>
-        </div>
-    </section>
-
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <p id="resultsSummary" class="text-sm text-slate-500 mb-6"></p>
 
@@ -60,17 +53,14 @@
                             ${product.brand ? `<span class="text-xs text-slate-500 font-semibold uppercase tracking-wide">${product.brand}</span>` : ''}
                             <h3 class="font-semibold text-slate-900 mt-1 mb-1 text-base leading-snug">${product.name}</h3>
                             ${product.description ? `<p class="text-xs text-slate-500 mb-2 line-clamp-2">${product.description}</p>` : ''}
-                            <p class="mb-4">
-                                ${pct > 0 ? `<span class="text-slate-400 line-through text-xs mr-2">KES ${product.originalPrice.toLocaleString()}</span>` : ''}
-                                <span class="text-red-600 font-extrabold text-lg">KES ${product.price.toLocaleString()}</span>
-                            </p>
+                            <p class="mb-4">${priceHTML(product)}</p>
                         </div>
                         <div class="space-y-2">
                             <button onclick="addToCart(${product.id})" class="w-full bg-slate-900 hover:bg-red-600 text-white py-2 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-2">
                                 <i class="fa-solid fa-cart-plus"></i>
                                 <span>Add to Inquiry Cart</span>
                             </button>
-                            <a href="${waLink(`Hello, is this part available? - ${product.name} (KES ${product.price.toLocaleString()})`)}" target="_blank" rel="noopener" class="w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white py-2 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-2 border border-emerald-200">
+                            <a href="${waLink(`Hello, is this part available? - ${product.name}${priceForWhatsApp(product)}`)}" target="_blank" rel="noopener" class="w-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white py-2 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-2 border border-emerald-200">
                                 <i class="fa-brands fa-whatsapp"></i>
                                 <span>Confirm Availability</span>
                             </a>

@@ -126,16 +126,25 @@ const DEFAULT_PRODUCTS = [
 let _productsCache = null;
 let _productsPromise = null;
 
+// Site-wide "show prices to visitors" flag. Defaults to true (current
+// behavior) until it's fetched from Supabase. Admin can flip this from
+// the Admin panel — when off, every visitor-facing page shows "Contact
+// for Price" instead of a number, while Admin itself always shows real
+// prices so staff can still manage the catalogue normally.
+let SHOW_PRICES = true;
+
 // Used by Home, Shop, About, Contact, Cart — always the live,
-// published catalogue every visitor sees identically.
+// published catalogue every visitor sees identically. Also refreshes
+// the SHOW_PRICES flag from the same round trip.
 // IMPORTANT: this is now async — call it with `await`.
 async function loadProducts() {
   if (_productsCache) return _productsCache;
   if (_productsPromise) return _productsPromise;
 
-  _productsPromise = sbGetProducts()
-    .then(products => {
+  _productsPromise = Promise.all([sbGetProducts(), sbGetShowPrices()])
+    .then(([products, showPrices]) => {
       _productsCache = products.map(normalizeProductCategory);
+      SHOW_PRICES = showPrices;
       return _productsCache;
     })
     .catch(err => {
@@ -148,12 +157,32 @@ async function loadProducts() {
   return _productsPromise;
 }
 
-// Call this right after Admin adds/edits/deletes/bulk-uploads so
-// the next loadProducts() call fetches fresh data instead of the
-// cached copy.
+// Call this right after Admin adds/edits/deletes/bulk-uploads (or
+// toggles the prices setting) so the next loadProducts() call fetches
+// fresh data instead of the cached copy.
 function invalidateProductsCache() {
   _productsCache = null;
   _productsPromise = null;
+}
+
+// Shared price markup for product cards / quick view, used on every
+// visitor-facing page. Returns "Contact for Price" instead of a number
+// whenever SHOW_PRICES is off. `sizeClass` lets a caller bump up the
+// font size (e.g. in Quick View) without duplicating the discount logic.
+function priceHTML(product, sizeClass) {
+  const size = sizeClass || 'text-base';
+  if (!SHOW_PRICES) {
+    return `<span class="text-red-600 font-extrabold ${size}">Contact for Price</span>`;
+  }
+  const pct = discountPercent(product);
+  return `${pct > 0 ? `<span class="text-slate-400 line-through text-xs mr-2">KES ${product.originalPrice.toLocaleString()}</span>` : ''}<span class="text-red-600 font-extrabold ${size}">KES ${product.price.toLocaleString()}</span>`;
+}
+
+// Price fragment to append to a WhatsApp inquiry message, e.g.
+// " (KES 6,000)" — empty string when prices are turned off, so
+// visitors aren't quoted a number that isn't shown on the site.
+function priceForWhatsApp(product) {
+  return SHOW_PRICES ? ` (KES ${product.price.toLocaleString()})` : '';
 }
 
 // Percentage discount, rounded — returns 0 if there's no valid original price.

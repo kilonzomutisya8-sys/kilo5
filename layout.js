@@ -202,15 +202,12 @@ async function openQuickView(productId) {
           ${product.brand ? `<span class="text-xs text-slate-500 font-semibold uppercase mt-1">${product.brand}</span>` : ''}
           <h3 class="font-bold text-white text-xl mt-2 mb-2 leading-snug">${product.name}</h3>
           ${product.description ? `<p class="text-sm text-slate-400 mb-4">${product.description}</p>` : ''}
-          <div class="mb-5">
-              ${pct > 0 ? `<span class="text-slate-500 line-through text-sm mr-2">KES ${product.originalPrice.toLocaleString()}</span>` : ''}
-              <span class="text-red-500 font-extrabold text-2xl">KES ${product.price.toLocaleString()}</span>
-          </div>
+          <div class="mb-5">${priceHTML(product, 'text-2xl')}</div>
           <div class="mt-auto space-y-2">
               <button onclick="addToCart(${product.id})" class="w-full bg-slate-800 hover:bg-red-600 text-white py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2">
                   <i class="fa-solid fa-cart-plus"></i><span>Add to Inquiry Cart</span>
               </button>
-              <a href="${waLink(`Hello, is this part available? - ${product.name} (KES ${product.price.toLocaleString()})`)}" target="_blank" rel="noopener" class="w-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2 border border-emerald-500/30">
+              <a href="${waLink(`Hello, is this part available? - ${product.name}${priceForWhatsApp(product)}`)}" target="_blank" rel="noopener" class="w-full bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center space-x-2 border border-emerald-500/30">
                   <i class="fa-brands fa-whatsapp"></i><span>Confirm Availability</span>
               </a>
           </div>
