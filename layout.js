@@ -68,7 +68,7 @@ function renderHeader(activePage) {
   }).join('');
 
   return `
-  <header class="sticky top-0 z-40 bg-slate-950 border-b border-slate-800 shadow-md">
+  <header class="bg-slate-950 border-b border-slate-800 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-3">
           <div class="flex items-center gap-3 md:gap-8 min-w-0">
               <a href="index.html" class="flex items-center space-x-3 shrink-0 min-w-0">
@@ -247,6 +247,8 @@ function initLayout(activePage) {
   document.getElementById('cartDrawerContainer').innerHTML = renderCartDrawer();
   document.getElementById('floatingWhatsApp').innerHTML = renderFloatingWhatsApp();
 
+  pinNavToTop();
+
   const quickViewContainer = document.getElementById('quickViewContainer');
   if (quickViewContainer) {
     quickViewContainer.innerHTML = renderQuickViewModal();
@@ -273,4 +275,29 @@ function initLayout(activePage) {
   }
 
   initCart();
+}
+
+// Keeps the header (logo/nav + search bar) permanently pinned to the
+// top of the viewport with true position:fixed — guaranteed to stay
+// visible the entire time you scroll, all the way to the bottom of
+// the page, regardless of browser quirks with position:sticky. The
+// red/green promo strip above it is left in normal flow and scrolls
+// away as usual — only the search bar needs to stay put. A resize
+// observer keeps a matching spacer (via body padding-top) so page
+// content is never hidden underneath the fixed header, even when the
+// mobile menu opens and the header's height changes.
+function pinNavToTop() {
+  const header = document.getElementById('siteHeader');
+  if (!header) return;
+
+  header.classList.add('fixed', 'top-0', 'inset-x-0', 'z-40');
+
+  const syncSpacing = () => {
+    document.body.style.paddingTop = header.offsetHeight + 'px';
+  };
+  syncSpacing();
+  window.addEventListener('resize', syncSpacing);
+  if (window.ResizeObserver) {
+    new ResizeObserver(syncSpacing).observe(header);
+  }
 }
