@@ -142,6 +142,35 @@ async function sbSetShowPrices(value) {
   });
 }
 
+/* ---------- Category images (Homepage "Shop by Category" tiles) ---------- */
+// Backed by a small `category_images` table: one row per category
+// name, holding the image URL admin picked for that tile. Categories
+// with no row (or a null image) just show a fallback icon on the
+// homepage instead — nothing breaks if this table hasn't been
+// created yet or a category hasn't been given a photo.
+
+async function sbGetCategoryImages() {
+  try {
+    const rows = await sbRequest('/category_images?select=category,image');
+    const map = {};
+    (rows || []).forEach(r => { if (r.image) map[r.category] = r.image; });
+    return map;
+  } catch (e) {
+    console.warn('Could not load category images — homepage will show icons instead.', e);
+    return {};
+  }
+}
+
+// Upserts (insert-or-update) a single category's image by category
+// name, which is the table's primary key.
+async function sbSetCategoryImage(category, imageUrl) {
+  await sbRequest('/category_images', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({ category, image: imageUrl || null })
+  });
+}
+
 /* ---------- Storage (product photo uploads) ---------- */
 
 // Uploads a File object the admin picked from their computer and

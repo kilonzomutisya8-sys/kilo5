@@ -33,8 +33,19 @@
         initLayout('shop.html');
 
         let searchQuery = '';
+        let categoryFilter = '';
         const params = new URLSearchParams(window.location.search);
         if (params.get('q')) searchQuery = params.get('q');
+        if (params.get('category')) categoryFilter = params.get('category');
+
+        function clearCategoryFilter() {
+            categoryFilter = '';
+            const url = new URL(window.location);
+            url.searchParams.delete('category');
+            window.history.replaceState({}, '', url);
+            renderProducts();
+        }
+        window.clearCategoryFilter = clearCategoryFilter;
 
         function productCard(product) {
             const pct = discountPercent(product);
@@ -74,14 +85,24 @@
             const productGrid = document.getElementById('productGrid');
             const summary = document.getElementById('resultsSummary');
 
-            const filtered = searchProducts(products, searchQuery);
+            const byCategory = filterByCategory(products, categoryFilter);
+            const filtered = searchProducts(byCategory, searchQuery);
 
-            summary.textContent = searchQuery
-                ? `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}"`
-                : `Showing all ${filtered.length} parts — search above to narrow it down.`;
+            const clearBtn = `<button onclick="clearCategoryFilter()" class="ml-2 text-red-500 hover:text-red-600 font-semibold underline">Clear category</button>`;
+
+            if (categoryFilter && searchQuery) {
+                summary.innerHTML = `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}" in <strong>${categoryFilter}</strong>${clearBtn}`;
+            } else if (categoryFilter) {
+                summary.innerHTML = `${filtered.length} part${filtered.length === 1 ? '' : 's'} in <strong>${categoryFilter}</strong>${clearBtn}`;
+            } else if (searchQuery) {
+                summary.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}"`;
+            } else {
+                summary.textContent = `Showing all ${filtered.length} parts — search above to narrow it down.`;
+            }
 
             if (filtered.length === 0) {
-                productGrid.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i><p>No auto parts found matching "${searchQuery}". Try a different term, or confirm with us on WhatsApp.</p></div>`;
+                const what = searchQuery ? `matching "${searchQuery}"` : `in "${categoryFilter}"`;
+                productGrid.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i><p>No auto parts found ${what}. Try a different term, or confirm with us on WhatsApp.</p></div>`;
                 return;
             }
 

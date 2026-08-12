@@ -30,29 +30,21 @@
 
     <!-- Shop by Category -->
     <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14">
-        <div class="mb-6">
+        <div class="mb-8 text-center">
             <h2 class="text-2xl sm:text-3xl font-bold text-slate-900">Shop by Category</h2>
-            <p class="text-sm text-slate-500 mt-1">Slide left or right to see every category, or tap one to jump straight there.</p>
+            <p class="text-sm text-slate-500 mt-1">Tap a category to browse those parts, or use the search bar above to find something specific.</p>
         </div>
-        <div class="relative">
-            <button id="categoryScrollLeft" type="button" aria-label="Scroll categories left" class="slider-arrow slider-arrow-left">
-                <i class="fa-solid fa-chevron-left"></i>
-            </button>
-            <div id="categoryRail" class="product-rail"></div>
-            <button id="categoryScrollRight" type="button" aria-label="Scroll categories right" class="slider-arrow slider-arrow-right">
-                <i class="fa-solid fa-chevron-right"></i>
-            </button>
-        </div>
+        <div id="categoryGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5"></div>
     </section>
 
     <!-- Product Showcase -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
         <div class="mb-8 text-center">
-            <h2 class="text-2xl sm:text-3xl font-bold text-slate-900">Parts In Stock</h2>
-            <p class="text-sm text-slate-500 mt-1">A quick look at what we stock — use the search bar above to find a specific part, or browse the full catalogue.</p>
+            <h2 id="homeProductsHeading" class="text-2xl sm:text-3xl font-bold text-slate-900">Parts In Stock</h2>
+            <p id="homeProductsSubtext" class="text-sm text-slate-500 mt-1">A quick look at what we stock — use the search bar above to find a specific part, or browse the full catalogue.</p>
         </div>
         <div id="productGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"></div>
-        <div class="text-center mt-10">
+        <div id="viewCatalogueLink" class="text-center mt-10">
             <a href="shop.html" class="inline-flex items-center space-x-2 bg-slate-900 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-lg shadow transition">
                 <span>View Full Catalogue</span>
                 <i class="fa-solid fa-arrow-right"></i>
@@ -71,33 +63,6 @@
     <script src="cart.js"></script>
     <script>
         initLayout('index.html');
-
-        // Category slider — categories only (no subcategories), each
-        // tile jumps to Shop pre-filtered to that category via the
-        // existing search (category text is already part of the
-        // search haystack in searchProducts()).
-        function renderCategoryTile(cat) {
-            const icon = CATEGORY_ICONS[cat] || 'fa-solid fa-gear';
-            return `
-                <a href="shop.html?q=${encodeURIComponent(cat)}" class="category-tile bg-white border border-slate-200 rounded-xl p-5 flex flex-col items-center text-center hover:border-red-300 hover:shadow-md transition shadow-sm">
-                    <div class="w-12 h-12 rounded-full bg-red-600/10 border border-red-500/20 flex items-center justify-center mb-3">
-                        <i class="${icon} text-red-500 text-lg"></i>
-                    </div>
-                    <h3 class="font-semibold text-slate-900 text-xs leading-snug">${cat}</h3>
-                </a>`;
-        }
-
-        function initCategorySlider() {
-            const rail = document.getElementById('categoryRail');
-            rail.innerHTML = CATEGORIES.map(renderCategoryTile).join('');
-            document.getElementById('categoryScrollLeft').addEventListener('click', () => {
-                rail.scrollBy({ left: -320, behavior: 'smooth' });
-            });
-            document.getElementById('categoryScrollRight').addEventListener('click', () => {
-                rail.scrollBy({ left: 320, behavior: 'smooth' });
-            });
-        }
-        initCategorySlider();
 
         function renderProductCard(product) {
             const pct = discountPercent(product);
@@ -125,11 +90,76 @@
                 </div>`;
         }
 
-        async function renderHomeProducts() {
-            const products = await loadProducts();
-            document.getElementById('productGrid').innerHTML = products.slice(0, 12).map(renderProductCard).join('');
+        // Renders the 7 category tiles above the product grid. Each tile
+        // links straight into Shop pre-filtered by that category. Photos
+        // come from Admin > Category Images (Supabase); any category with
+        // no photo saved yet just shows a plain icon tile instead.
+        async function renderCategoryTiles() {
+            const images = await loadCategoryImages();
+            const grid = document.getElementById('categoryGrid');
+            grid.innerHTML = CATEGORIES.map(cat => {
+                const img = images[cat];
+                const icon = CATEGORY_ICONS[cat] || 'fa-solid fa-gear';
+                return `
+                <a href="shop.html?category=${encodeURIComponent(cat)}" class="group relative h-32 sm:h-36 rounded-xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md hover:border-red-300 transition bg-slate-900">
+                    ${img
+                        ? `<img src="${img}" alt="${cat}" class="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition duration-300">`
+                        : `<div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800"><i class="${icon} text-3xl text-red-500/70"></i></div>`
+                    }
+                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/10 to-transparent"></div>
+                    <span class="absolute bottom-3 left-3 right-3 text-white font-bold text-sm leading-tight">${cat}</span>
+                </a>`;
+            }).join('');
         }
 
+        // Renders the "Parts In Stock" grid. With no query, it's a
+        // 12-item taster of the catalogue (as before). Typing in the
+        // header search bar (present on every page) now filters this
+        // grid live, right here on the homepage — no need to leave the
+        // page to see results.
+        let homeSearchQuery = '';
+
+        async function renderHomeProducts() {
+            const products = await loadProducts();
+            const grid = document.getElementById('productGrid');
+            const heading = document.getElementById('homeProductsHeading');
+            const subtext = document.getElementById('homeProductsSubtext');
+            const catalogueLink = document.getElementById('viewCatalogueLink');
+
+            const q = homeSearchQuery.trim();
+            const filtered = q ? searchProducts(products, q) : products.slice(0, 12);
+
+            if (q) {
+                heading.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${q}"`;
+                subtext.textContent = filtered.length
+                    ? 'Tap a part below for details, or keep typing to narrow it further.'
+                    : 'No matches here — try a different term, or confirm with us on WhatsApp.';
+                catalogueLink.classList.add('hidden');
+            } else {
+                heading.textContent = 'Parts In Stock';
+                subtext.textContent = "A quick look at what we stock — use the search bar above to find a specific part, or browse the full catalogue.";
+                catalogueLink.classList.remove('hidden');
+            }
+
+            grid.innerHTML = filtered.length
+                ? filtered.map(renderProductCard).join('')
+                : `<div class="col-span-full text-center py-16 text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i><p>No auto parts found matching "${q}". Try a different term, or confirm with us on WhatsApp.</p></div>`;
+        }
+
+        // The header's search bar lives on every page (see layout.js).
+        // On Shop, it live-filters Shop's own grid. Here on Home, wire
+        // that same input to live-filter this page's grid too — typing
+        // now actually searches and shows matching parts immediately,
+        // right on the homepage.
+        const headerSearchInput = document.getElementById('searchInputHeader');
+        if (headerSearchInput) {
+            headerSearchInput.addEventListener('input', (e) => {
+                homeSearchQuery = e.target.value;
+                renderHomeProducts();
+            });
+        }
+
+        renderCategoryTiles();
         renderHomeProducts();
     </script>
 </body>

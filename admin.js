@@ -812,6 +812,88 @@ async function processBulkFile(file) {
   }
 }
 
+/* ---------- Category Images (Homepage "Shop by Category" tiles) ---------- */
+// Lets admin attach one photo per category, saved straight to the
+// category_images Supabase table. The homepage reads this same table
+// (via loadCategoryImages() in products.js) to decide what to show on
+// each category tile — a plain icon if nothing's been saved yet.
+
+let categoryImagesCache = {};
+let categoryImagePendingFiles = {};
+
+function openCategoryImagesModal() {
+  document.getElementById('categoryImagesModal').classList.remove('hidden');
+  renderCategoryImagesList();
+}
+window.openCategoryImagesModal = openCategoryImagesModal;
+
+function closeCategoryImagesModal() {
+  document.getElementById('categoryImagesModal').classList.add('hidden');
+}
+window.closeCategoryImagesModal = closeCategoryImagesModal;
+
+async function renderCategoryImagesList() {
+  const container = document.getElementById('categoryImagesList');
+  container.innerHTML = `<p class="text-sm text-slate-500">Loading...</p>`;
+  categoryImagePendingFiles = {};
+
+  try {
+    categoryImagesCache = await sbGetCategoryImages();
+  } catch (e) {
+    categoryImagesCache = {};
+  }
+
+  container.innerHTML = CATEGORIES.map((cat, i) => {
+    const img = categoryImagesCache[cat] || '';
+    return `
+    <div class="flex items-center gap-4 bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <img id="catImgPreview${i}" src="${img}" class="w-16 h-16 rounded-lg object-cover bg-slate-800 border border-slate-700 shrink-0 ${img ? '' : 'hidden'}">
+        <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-white mb-2">${cat}</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <label class="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer shrink-0">
+                    <i class="fa-solid fa-upload"></i> Upload
+                    <input type="file" accept="image/*" class="hidden" onchange="handleCategoryImageFile(${i}, this.files[0])">
+                </label>
+                <input type="text" id="catImgUrl${i}" placeholder="or paste an image URL" value="${img}" class="flex-1 min-w-[160px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:border-red-500 outline-none transition">
+                <button onclick="saveCategoryImage(${i}, '${cat.replace(/'/g, "\\'")}')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg transition shrink-0">Save</button>
+            </div>
+        </div>
+    </div>`;
+  }).join('');
+}
+
+function handleCategoryImageFile(i, file) {
+  if (!file) return;
+  categoryImagePendingFiles[i] = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const preview = document.getElementById(`catImgPreview${i}`);
+    preview.src = ev.target.result;
+    preview.classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+window.handleCategoryImageFile = handleCategoryImageFile;
+
+async function saveCategoryImage(i, category) {
+  const urlInput = document.getElementById(`catImgUrl${i}`);
+  try {
+    let url = urlInput.value.trim();
+    const pendingFile = categoryImagePendingFiles[i];
+    if (pendingFile) {
+      url = await sbUploadImage(pendingFile);
+      urlInput.value = url;
+    }
+    await sbSetCategoryImage(category, url);
+    delete categoryImagePendingFiles[i];
+    invalidateCategoryImagesCache();
+  } catch (err) {
+    alert('Could not save this category image.\n\n' + err.message);
+  }
+}
+window.saveCategoryImage = saveCategoryImage;
+
 // Reads pictures pasted directly into a workbook's cells (stored
 // inside xl/media/*) and uploads each one to Supabase Storage,
 // returning their public URLs in the same order they appear in

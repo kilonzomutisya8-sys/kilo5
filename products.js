@@ -165,6 +165,34 @@ function invalidateProductsCache() {
   _productsPromise = null;
 }
 
+// Same caching pattern as loadProducts(), but for the homepage
+// "Shop by Category" tile photos. Returns a plain object keyed by
+// category name (e.g. { "Suspension Parts": "https://..." }) —
+// categories with no saved photo are simply absent from the object,
+// and the homepage falls back to an icon tile for those.
+let _categoryImagesCache = null;
+let _categoryImagesPromise = null;
+
+async function loadCategoryImages() {
+  if (_categoryImagesCache) return _categoryImagesCache;
+  if (_categoryImagesPromise) return _categoryImagesPromise;
+
+  _categoryImagesPromise = sbGetCategoryImages()
+    .then(map => { _categoryImagesCache = map; return _categoryImagesCache; })
+    .catch(() => { _categoryImagesCache = {}; return _categoryImagesCache; })
+    .finally(() => { _categoryImagesPromise = null; });
+
+  return _categoryImagesPromise;
+}
+
+// Call this right after Admin saves a category image so the next
+// loadCategoryImages() call fetches the fresh photo instead of the
+// cached copy.
+function invalidateCategoryImagesCache() {
+  _categoryImagesCache = null;
+  _categoryImagesPromise = null;
+}
+
 // Shared price markup for product cards / quick view, used on every
 // visitor-facing page. Returns "Contact for Price" instead of a number
 // whenever SHOW_PRICES is off. `sizeClass` lets a caller bump up the
@@ -207,4 +235,11 @@ function searchProducts(products, query) {
     const haystack = `${p.name} ${p.brand || ''} ${p.category || ''} ${p.subcategory || ''} ${p.description || ''}`.toLowerCase();
     return terms.every(term => haystack.includes(term));
   });
+}
+
+// Used by the homepage category tiles + Shop page's ?category= link —
+// an exact match against a product's top-level category.
+function filterByCategory(products, category) {
+  if (!category) return products;
+  return products.filter(p => p.category === category);
 }

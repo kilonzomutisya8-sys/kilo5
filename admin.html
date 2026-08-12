@@ -73,6 +73,9 @@
                 <button onclick="openBulkPhotoModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
                     <i class="fa-solid fa-images"></i> Bulk Photo to Selected Products
                 </button>
+                <button onclick="openCategoryImagesModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
+                    <i class="fa-solid fa-image"></i> Category Images
+                </button>
                 <button onclick="exportProducts()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
                     <i class="fa-solid fa-file-export"></i> Export Backup (JSON)
                 </button>
@@ -268,6 +271,23 @@
                         <button type="button" onclick="closeBulkPhotoModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-lg transition">Cancel</button>
                         <button type="button" id="bpApplyBtn" onclick="applyBulkPhoto()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition">Apply Photo</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Images Modal (Homepage "Shop by Category" tile photos) -->
+    <div id="categoryImagesModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeCategoryImagesModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-slate-950 border border-slate-800 rounded-xl w-full max-w-2xl my-8">
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white">Homepage Category Images</h2>
+                    <button onclick="closeCategoryImagesModal()" class="text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6">
+                    <p class="text-xs text-slate-500 mb-5">These photos show on the "Shop by Category" tiles on your homepage — upload one per category, or paste an image link. A category left blank just shows a plain icon tile instead, so nothing looks broken while you're still adding photos.</p>
+                    <div id="categoryImagesList" class="space-y-4"></div>
                 </div>
             </div>
         </div>

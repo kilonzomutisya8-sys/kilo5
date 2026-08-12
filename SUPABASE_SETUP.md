@@ -105,7 +105,33 @@ Until this table exists, the site simply defaults to showing prices
 as normal — nothing breaks, the Admin toggle just won't have anywhere
 to save its setting.
 
-## 3. Create the image storage bucket (for Admin photo uploads)
+## 3. Create the `category_images` table (for the homepage category tiles)
+
+Powers the **Category Images** button in Admin, which lets you attach a
+photo to each of your 7 categories — those photos are what show on the
+"Shop by Category" tiles on your homepage. Any category left blank
+just shows a plain icon tile instead, so nothing looks broken while
+you're still adding photos. In the SQL Editor, run:
+
+```sql
+create table if not exists category_images (
+  category text primary key,
+  image text
+);
+
+alter table category_images enable row level security;
+
+create policy "Public can read category images"
+  on category_images for select
+  using (true);
+
+create policy "Public can write category images"
+  on category_images for all
+  using (true)
+  with check (true);
+```
+
+## 4. Create the image storage bucket (for Admin photo uploads)
 
 Only needed if you plan to upload photos from your computer in
 Admin (as opposed to always pasting an image link). In the SQL
@@ -125,24 +151,32 @@ create policy "Public can upload product images"
   with check (bucket_id = 'product-images');
 ```
 
-## 4. Upload the site files
+## 5. Upload the site files
 
 Upload every file in this folder to your GitHub repo root (same
 flat structure as before — no subfolders):
 
-- `index.html`, `shop.html`, `about.html`, `contact.html`, `admin.html`
+- `index.html` ← updated (Shop by Category tiles + working search)
+- `shop.html` ← updated (accepts a category filter from the tiles)
+- `about.html`, `contact.html`
+- `admin.html` ← updated (new "Category Images" button + modal)
 - `style.css`
-- `supabase.js` ← new
-- `products.js` ← updated
-- `layout.js` ← updated
-- `cart.js` ← updated
-- `admin.js` ← new
+- `supabase.js` ← updated (category image read/write helpers)
+- `products.js` ← updated (category image loading + filter helper)
+- `layout.js`
+- `cart.js`
+- `admin.js` ← updated (Category Images manager)
 
 You no longer need `products-data.json` — the site reads live
 from Supabase now. You can delete it from the repo, or leave it,
 it's simply unused.
 
-## 5. Try it
+Your product data itself lives in Supabase, not in these files, so
+re-uploading these files to GitHub does not touch or overwrite any
+product you've already added through Admin — you're only replacing
+the site's code, not its data.
+
+## 6. Try it
 
 1. Open your live site — Home and Shop should show the products
    you just inserted in step 1.
@@ -159,6 +193,15 @@ it's simply unused.
    refresh Home/Shop in another tab — prices should disappear
    (replaced with "Contact for Price") when it's off, while Admin
    itself keeps showing real prices at all times.
+6. On the Home page, type into the search bar at the top — matching
+   parts now appear right there on the homepage as you type (Shop's
+   search bar still works the same way it always did).
+7. Click **Category Images** in the Admin toolbar, upload (or paste a
+   link for) a photo against a couple of categories, hit **Save** on
+   each, then refresh the Home page — those categories' tiles under
+   "Shop by Category" should now show your photos instead of icons.
+   Clicking a tile takes visitors to Shop already filtered to that
+   category.
 
 ## A note on security
 
