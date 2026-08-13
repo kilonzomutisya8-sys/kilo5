@@ -194,7 +194,7 @@ async function openQuickView(productId) {
   const pct = discountPercent(product);
   document.getElementById('quickViewBody').innerHTML = `
       <div class="h-64 sm:h-full bg-slate-900 relative">
-          <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover">
+          <img src="${product.image}" alt="${product.name}" class="w-full h-full object-contain">
           ${pct > 0 ? `<span class="absolute top-3 left-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">-${pct}%</span>` : ''}
       </div>
       <div class="p-6 flex flex-col">

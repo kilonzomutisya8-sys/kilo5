@@ -33,26 +33,15 @@
         initLayout('shop.html');
 
         let searchQuery = '';
-        let categoryFilter = '';
         const params = new URLSearchParams(window.location.search);
         if (params.get('q')) searchQuery = params.get('q');
-        if (params.get('category')) categoryFilter = params.get('category');
-
-        function clearCategoryFilter() {
-            categoryFilter = '';
-            const url = new URL(window.location);
-            url.searchParams.delete('category');
-            window.history.replaceState({}, '', url);
-            renderProducts();
-        }
-        window.clearCategoryFilter = clearCategoryFilter;
 
         function productCard(product) {
             const pct = discountPercent(product);
             return `
                 <div class="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col hover:border-red-300 hover:shadow-md transition shadow-sm">
-                    <div class="h-48 overflow-hidden bg-slate-100 relative group">
-                        <img src="${product.image}" alt="${product.name}" class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition duration-300">
+                    <div class="aspect-[3/2] overflow-hidden bg-slate-100 relative group">
+                        <img src="${product.image}" alt="${product.name}" class="w-full h-full object-contain opacity-90 group-hover:opacity-100 transition duration-300">
                         ${product.subcategory ? `<span class="absolute top-3 left-3 bg-slate-900/90 text-white text-xs font-semibold px-2 py-1 rounded shadow">${product.subcategory}</span>` : ''}
                         ${pct > 0 ? `<span class="absolute top-3 right-3 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">-${pct}%</span>` : ''}
                         <button onclick="openQuickView(${product.id})" class="absolute inset-x-3 bottom-3 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-semibold py-2 rounded-lg opacity-0 group-hover:opacity-100 transition flex items-center justify-center space-x-1.5 border border-slate-800">
@@ -85,24 +74,14 @@
             const productGrid = document.getElementById('productGrid');
             const summary = document.getElementById('resultsSummary');
 
-            const byCategory = filterByCategory(products, categoryFilter);
-            const filtered = searchProducts(byCategory, searchQuery);
+            const filtered = searchProducts(products, searchQuery);
 
-            const clearBtn = `<button onclick="clearCategoryFilter()" class="ml-2 text-red-500 hover:text-red-600 font-semibold underline">Clear category</button>`;
-
-            if (categoryFilter && searchQuery) {
-                summary.innerHTML = `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}" in <strong>${categoryFilter}</strong>${clearBtn}`;
-            } else if (categoryFilter) {
-                summary.innerHTML = `${filtered.length} part${filtered.length === 1 ? '' : 's'} in <strong>${categoryFilter}</strong>${clearBtn}`;
-            } else if (searchQuery) {
-                summary.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}"`;
-            } else {
-                summary.textContent = `Showing all ${filtered.length} parts — search above to narrow it down.`;
-            }
+            summary.textContent = searchQuery
+                ? `${filtered.length} result${filtered.length === 1 ? '' : 's'} for "${searchQuery}"`
+                : `Showing all ${filtered.length} parts — search above to narrow it down.`;
 
             if (filtered.length === 0) {
-                const what = searchQuery ? `matching "${searchQuery}"` : `in "${categoryFilter}"`;
-                productGrid.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i><p>No auto parts found ${what}. Try a different term, or confirm with us on WhatsApp.</p></div>`;
+                productGrid.innerHTML = `<div class="col-span-full text-center py-16 text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i><p>No auto parts found matching "${searchQuery}". Try a different term, or confirm with us on WhatsApp.</p></div>`;
                 return;
             }
 
