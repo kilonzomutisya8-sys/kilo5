@@ -589,6 +589,103 @@ async function applyBulkPhoto() {
 }
 window.applyBulkPhoto = applyBulkPhoto;
 
+/* ---------- Auto-Fix Categories ---------- */
+
+// Keyword fallback for products whose Subcategory is missing/unrecognized
+// (so resolveSubcategory() in products.js can't fix them) AND whose
+// Category text doesn't exactly match a canonical category either — e.g.
+// products imported with "Battery" or "Tyre" typed as the category, which
+// the old bulk-upload bug silently filed under the wrong category. Each
+// entry is checked in order against the product's name + brand +
+// description; the first match wins. Keep these terms unambiguous —
+// don't add generic words like "wheel" (matches Wheel Bearings too).
+const CATEGORY_KEYWORD_RULES = [
+  { category: 'Car Batteries', terms: ['battery', 'batteries'] },
+  { category: 'Tyres', terms: ['tyre', 'tyres', 'tire', 'tires'] },
+];
+
+function guessCategoryFromKeywords(product) {
+  const haystack = `${product.name} ${product.brand || ''} ${product.description || ''}`.toLowerCase();
+  for (const rule of CATEGORY_KEYWORD_RULES) {
+    if (rule.terms.some(t => haystack.includes(t))) return rule.category;
+  }
+  return null;
+}
+
+// Scans every product in the database (not just what's loaded/cached) and
+// works out its correct category:
+//   1. If its Subcategory is a recognized one (e.g. "Coil Springs"), that
+//      always wins — the category is corrected to match, same logic the
+//      live site already uses for display, except this SAVES it back to
+//      Supabase instead of just fixing it in memory for one page view.
+//   2. Otherwise, if its name/brand/description contains an unambiguous
+//      keyword (e.g. "battery", "tyre"), file it under that category.
+//   3. Otherwise, leave it alone — nothing is guessed if there's no
+//      reasonably confident signal.
+// Only products whose corrected category differs from what's saved are
+// updated. Shows a summary of every change made.
+async function autoFixCategories(btn) {
+  if (!confirm('Scan every product and automatically fix any filed under the wrong category? This updates your live database directly.')) return;
+
+  const originalLabel = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Scanning...';
+  }
+
+  try {
+    invalidateProductsCache();
+    const rows = await sbGetProducts(); // raw, unnormalized — what's actually saved
+
+    const fixes = [];
+    rows.forEach(p => {
+      let correctedCategory = null;
+      let correctedSubcategory = p.subcategory;
+
+      const subMatch = p.subcategory && resolveSubcategory(p.subcategory);
+      if (subMatch) {
+        correctedCategory = subMatch.category;
+        correctedSubcategory = subMatch.subcategory;
+      } else if (!CATEGORIES.includes(p.category)) {
+        // Category text itself isn't even a recognized category name —
+        // try a keyword-based guess.
+        correctedCategory = guessCategoryFromKeywords(p);
+      }
+
+      if (correctedCategory && (correctedCategory !== p.category || correctedSubcategory !== p.subcategory)) {
+        fixes.push({
+          id: p.id,
+          name: p.name,
+          from: `${p.category}${p.subcategory ? ' / ' + p.subcategory : ''}`,
+          to: `${correctedCategory}${correctedSubcategory ? ' / ' + correctedSubcategory : ''}`,
+          product: { ...p, category: correctedCategory, subcategory: correctedSubcategory }
+        });
+      }
+    });
+
+    if (fixes.length === 0) {
+      alert('Scanned every product — nothing needed fixing. All categories already match a recognized category/subcategory.');
+      return;
+    }
+
+    await Promise.all(fixes.map(f => sbUpdateProduct(f.id, f.product)));
+    await refreshProducts();
+
+    let msg = `Fixed ${fixes.length} product${fixes.length === 1 ? '' : 's'}:\n\n` +
+      fixes.slice(0, 25).map(f => `"${f.name}": ${f.from}  →  ${f.to}`).join('\n');
+    if (fixes.length > 25) msg += `\n...and ${fixes.length - 25} more`;
+    alert(msg);
+  } catch (err) {
+    alert('Could not auto-fix categories.\n\n' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  }
+}
+window.autoFixCategories = autoFixCategories;
+
 /* ---------- Export backup ---------- */
 
 function exportProducts() {
@@ -688,6 +785,7 @@ async function processBulkFile(file) {
 
     const toImport = [];
     const skipped = [];
+    const recategorized = [];
 
     rows.forEach((row, i) => {
       const name = getField(row, 'Name', 'Product', 'Product Name', 'Part', 'Part Name', 'Item', 'Item Name', 'Title');
@@ -725,16 +823,20 @@ async function processBulkFile(file) {
       if (subMatch) {
         category = subMatch.category;
         subcategory = subMatch.subcategory;
-      } else if (rawCategory && canonicalCategoryByLower[rawCategory.toLowerCase()]) {
-        category = canonicalCategoryByLower[rawCategory.toLowerCase()];
+      } else if (rawCategory && canonicalCategoryByLower[rawCategory.trim().toLowerCase()]) {
+        category = canonicalCategoryByLower[rawCategory.trim().toLowerCase()];
         subcategory = rawSubcategory || '';
       } else if (rawCategory) {
         // Category cell has a value, but it's not one we recognize.
         // Rather than silently dropping the whole row, file it under
         // whatever was picked above the upload button and keep going —
         // a mismatched category shouldn't block a valid product import.
+        // BUT: this is exactly the "silently wrong" case the help text
+        // warns about, so we record it and report it after the upload
+        // instead of saying nothing.
         category = defaultCategory;
         subcategory = rawSubcategory || defaultSubcategory;
+        recategorized.push(`"${name}": category "${rawCategory}" didn't match any existing category — filed under "${defaultCategory}" instead.`);
       } else {
         // Nothing usable in the row itself — fall back to whatever
         // was picked above the upload button.
@@ -802,6 +904,11 @@ async function processBulkFile(file) {
     let msg = '';
     if (toInsert.length > 0) msg += `Added ${toInsert.length} new product${toInsert.length === 1 ? '' : 's'}.\n`;
     if (toUpdate.length > 0) msg += `Updated ${toUpdate.length} existing product${toUpdate.length === 1 ? '' : 's'} (matched by name) — no duplicates created.\n`;
+    if (recategorized.length > 0) {
+      msg += `\n\n⚠️ ${recategorized.length} row(s) had a Category that didn't match any existing category and were filed under "${defaultCategory}" instead:\n` + recategorized.slice(0, 15).join('\n');
+      if (recategorized.length > 15) msg += `\n...and ${recategorized.length - 15} more`;
+      msg += `\n\nGo to those products and fix their Category if "${defaultCategory}" isn't right.`;
+    }
     if (skipped.length > 0) {
       msg += `\n\nSkipped ${skipped.length} row(s):\n` + skipped.slice(0, 15).join('\n');
       if (skipped.length > 15) msg += `\n...and ${skipped.length - 15} more`;
@@ -811,88 +918,6 @@ async function processBulkFile(file) {
     alert('Could not process that file.\n\n' + err.message);
   }
 }
-
-/* ---------- Category Images (Homepage "Shop by Category" tiles) ---------- */
-// Lets admin attach one photo per category, saved straight to the
-// category_images Supabase table. The homepage reads this same table
-// (via loadCategoryImages() in products.js) to decide what to show on
-// each category tile — a plain icon if nothing's been saved yet.
-
-let categoryImagesCache = {};
-let categoryImagePendingFiles = {};
-
-function openCategoryImagesModal() {
-  document.getElementById('categoryImagesModal').classList.remove('hidden');
-  renderCategoryImagesList();
-}
-window.openCategoryImagesModal = openCategoryImagesModal;
-
-function closeCategoryImagesModal() {
-  document.getElementById('categoryImagesModal').classList.add('hidden');
-}
-window.closeCategoryImagesModal = closeCategoryImagesModal;
-
-async function renderCategoryImagesList() {
-  const container = document.getElementById('categoryImagesList');
-  container.innerHTML = `<p class="text-sm text-slate-500">Loading...</p>`;
-  categoryImagePendingFiles = {};
-
-  try {
-    categoryImagesCache = await sbGetCategoryImages();
-  } catch (e) {
-    categoryImagesCache = {};
-  }
-
-  container.innerHTML = CATEGORIES.map((cat, i) => {
-    const img = categoryImagesCache[cat] || '';
-    return `
-    <div class="flex items-center gap-4 bg-slate-900 border border-slate-800 rounded-lg p-4">
-        <img id="catImgPreview${i}" src="${img}" class="w-16 h-16 rounded-lg object-cover bg-slate-800 border border-slate-700 shrink-0 ${img ? '' : 'hidden'}">
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-white mb-2">${cat}</p>
-            <div class="flex flex-wrap items-center gap-2">
-                <label class="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer shrink-0">
-                    <i class="fa-solid fa-upload"></i> Upload
-                    <input type="file" accept="image/*" class="hidden" onchange="handleCategoryImageFile(${i}, this.files[0])">
-                </label>
-                <input type="text" id="catImgUrl${i}" placeholder="or paste an image URL" value="${img}" class="flex-1 min-w-[160px] px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:border-red-500 outline-none transition">
-                <button onclick="saveCategoryImage(${i}, '${cat.replace(/'/g, "\\'")}')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2.5 rounded-lg transition shrink-0">Save</button>
-            </div>
-        </div>
-    </div>`;
-  }).join('');
-}
-
-function handleCategoryImageFile(i, file) {
-  if (!file) return;
-  categoryImagePendingFiles[i] = file;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const preview = document.getElementById(`catImgPreview${i}`);
-    preview.src = ev.target.result;
-    preview.classList.remove('hidden');
-  };
-  reader.readAsDataURL(file);
-}
-window.handleCategoryImageFile = handleCategoryImageFile;
-
-async function saveCategoryImage(i, category) {
-  const urlInput = document.getElementById(`catImgUrl${i}`);
-  try {
-    let url = urlInput.value.trim();
-    const pendingFile = categoryImagePendingFiles[i];
-    if (pendingFile) {
-      url = await sbUploadImage(pendingFile);
-      urlInput.value = url;
-    }
-    await sbSetCategoryImage(category, url);
-    delete categoryImagePendingFiles[i];
-    invalidateCategoryImagesCache();
-  } catch (err) {
-    alert('Could not save this category image.\n\n' + err.message);
-  }
-}
-window.saveCategoryImage = saveCategoryImage;
 
 // Reads pictures pasted directly into a workbook's cells (stored
 // inside xl/media/*) and uploads each one to Supabase Storage,
