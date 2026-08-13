@@ -397,11 +397,24 @@ async function deleteProductClick(id) {
   const p = allProducts.find(x => x.id === id);
   if (!p) return;
   if (!confirm(`Delete "${p.name}"? This removes it from the live site immediately and can't be undone.`)) return;
+
+  // Disable this row's Edit/Delete buttons while the request is in
+  // flight so a double-click (or a slow connection) can't fire a
+  // second delete for the same product.
+  const row = [...document.querySelectorAll('#adminProductTable tr')]
+    .find(tr => tr.querySelector(`[onclick="deleteProductClick(${id})"]`));
+  const rowButtons = row ? row.querySelectorAll('button') : [];
+  rowButtons.forEach(b => b.disabled = true);
+
   try {
     await sbDeleteProduct(id);
     await refreshProducts();
   } catch (err) {
-    alert('Could not delete this product.\n\n' + err.message);
+    const hint = /401|403|permission|rls|policy/i.test(err.message)
+      ? '\n\nThis usually means the "Public can write products" policy (see SUPABASE_SETUP.md, step 1) hasn\'t been created on your products table yet — that policy is what allows deleting, not just adding/editing.'
+      : '';
+    alert('Could not delete this product.\n\n' + err.message + hint);
+    rowButtons.forEach(b => b.disabled = false);
   }
 }
 window.deleteProductClick = deleteProductClick;
@@ -725,29 +738,67 @@ async function deleteAllImages(btn) {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting...';
   }
 
+  // Each step below only ever touches the `image` column (or storage
+  // files) — never name, brand, category, price, or description — and
+  // each step is wrapped independently so a failure in one (e.g. a
+  // missing storage delete permission) can't stop the others from
+  // completing. That way "Delete All Images" always clears every photo
+  // reference it possibly can, even if actual file deletion from
+  // storage fails.
+  let filesDeletedCount = 0;
+  let storageError = null;
+  let productsCleared = false;
+  let productsError = null;
+  let categoriesCleared = false;
+
+  // 1) Delete the actual uploaded files from storage.
   try {
-    // 1) Delete the actual uploaded files from storage.
     const files = await sbListAllImages();
     if (files.length > 0) {
       await sbDeleteImages(files);
     }
+    filesDeletedCount = files.length;
+  } catch (e) {
+    storageError = e;
+    console.warn('Could not delete files from storage.', e);
+  }
 
-    // 2) Clear the image field on every product (products stay put).
+  // 2) Clear the image field on every product (products stay put —
+  //    name/brand/category/price/description are untouched).
+  try {
     await sbClearAllProductImages();
+    productsCleared = true;
+  } catch (e) {
+    productsError = e;
+    console.warn('Could not clear product image fields.', e);
+  }
 
-    // 3) Clear category tile photos too, if that table exists yet.
-    try {
-      await sbClearAllCategoryImages();
-    } catch (e) {
-      console.warn('Skipped clearing category tile images (table may not exist yet).', e);
+  // 3) Clear category tile photos too, if that table exists yet.
+  try {
+    await sbClearAllCategoryImages();
+    categoriesCleared = true;
+  } catch (e) {
+    console.warn('Skipped clearing category tile images (table may not exist yet).', e);
+  }
+
+  invalidateProductsCache();
+  await refreshProducts();
+
+  try {
+    let msg = productsCleared
+      ? `Done. Cleared the photo field on every product${categoriesCleared ? ' and every category tile' : ''}. All product names, prices, and descriptions are untouched.`
+      : `Could not clear product photo fields.\n\n${productsError ? productsError.message : ''}`;
+
+    if (storageError) {
+      const hint = /401|403|permission|rls|policy/i.test(storageError.message)
+        ? ' This is usually because the storage bucket is missing its DELETE policy — see the "Public can delete product images" policy in SUPABASE_SETUP.md, step 4.'
+        : '';
+      msg += `\n\nHowever, the uploaded photo files themselves could NOT be deleted from storage (they'll no longer show anywhere on the site, but still take up storage space).${hint}\n\n(${storageError.message})`;
+    } else {
+      msg += `\n\nDeleted ${filesDeletedCount} uploaded photo${filesDeletedCount === 1 ? '' : 's'} from storage.`;
     }
 
-    invalidateProductsCache();
-    await refreshProducts();
-
-    alert(`Done. Deleted ${files.length} uploaded photo${files.length === 1 ? '' : 's'} and cleared the photo field on every product. All products themselves are untouched.`);
-  } catch (err) {
-    alert('Could not delete all images.\n\n' + err.message);
+    alert(msg);
   } finally {
     if (btn) {
       btn.disabled = false;

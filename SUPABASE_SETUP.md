@@ -44,6 +44,13 @@ create policy "Public can write products"
   with check (true);
 ```
 
+> This one `for all` policy already covers add, edit, **and delete**
+> (that's what makes the trash-icon button in Admin work — it sends a
+> `DELETE` request to this table). If you ever recreate this table or
+> its policies by hand and the Delete button in Admin stops working,
+> re-run just the `create policy "Public can write products" ...`
+> block above — that's the policy responsible for it.
+
 3. (Optional but recommended) Load your current catalogue in one
    go instead of re-typing everything in Admin. Run this once,
    right after the table above:
@@ -149,7 +156,20 @@ create policy "Public can read product images"
 create policy "Public can upload product images"
   on storage.objects for insert
   with check (bucket_id = 'product-images');
+
+-- Required for the Admin "Delete All Images" button (and any future
+-- per-photo delete) to actually remove files from storage. Without
+-- this policy, delete requests to the bucket are silently rejected
+-- by Supabase (a 403), even though the button itself works fine.
+create policy "Public can delete product images"
+  on storage.objects for delete
+  using (bucket_id = 'product-images');
 ```
+
+> **If you set up your bucket before this update:** just run the
+> `create policy "Public can delete product images" ...` block above
+> on its own in the SQL Editor — it's safe to run even if the table
+> and the other two policies already exist.
 
 ## 5. Upload the site files
 
