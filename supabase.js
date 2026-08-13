@@ -191,3 +191,72 @@ async function sbUploadImage(file) {
   }
   return `${SUPABASE_STORAGE}/object/public/${PRODUCT_IMAGE_BUCKET}/${path}`;
 }
+
+// Lists every file currently sitting in the product-images storage
+// bucket (paginated under the hood so it also works once you have
+// hundreds of uploads, not just the first page).
+async function sbListAllImages() {
+  const names = [];
+  let offset = 0;
+  const limit = 1000;
+  for (;;) {
+    const res = await fetch(`${SUPABASE_STORAGE}/object/list/${PRODUCT_IMAGE_BUCKET}`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ prefix: '', limit, offset, sortBy: { column: 'name', order: 'asc' } })
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json()).message || ''; } catch (e) { /* ignore */ }
+      throw new Error(`Could not list uploaded images (${res.status}) ${detail}`);
+    }
+    const page = await res.json();
+    if (!page || page.length === 0) break;
+    page.forEach(f => { if (f && f.name) names.push(f.name); });
+    if (page.length < limit) break;
+    offset += limit;
+  }
+  return names;
+}
+
+// Permanently deletes a batch of files from the product-images
+// storage bucket by name. Supabase's bulk-delete endpoint accepts
+// up to ~1000 paths per call, so this chunks large lists.
+async function sbDeleteImages(paths) {
+  const chunkSize = 500;
+  for (let i = 0; i < paths.length; i += chunkSize) {
+    const chunk = paths.slice(i, i + chunkSize);
+    const res = await fetch(`${SUPABASE_STORAGE}/object/${PRODUCT_IMAGE_BUCKET}`, {
+      method: 'DELETE',
+      headers: sbHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ prefixes: chunk })
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json()).message || ''; } catch (e) { /* ignore */ }
+      throw new Error(`Could not delete uploaded images (${res.status}) ${detail}`);
+    }
+  }
+}
+
+// Clears the photo off every product WITHOUT touching anything
+// else about the product (name, price, category, description, etc.
+// all stay exactly as they are) and without deleting any product
+// rows. Used by the Admin "Delete All Images" button.
+async function sbClearAllProductImages() {
+  await sbRequest('/products?id=not.is.null', {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ image: null })
+  });
+}
+
+// Clears the photo off every homepage category tile, leaving the
+// categories themselves (and everything else) untouched.
+async function sbClearAllCategoryImages() {
+  await sbRequest('/category_images?category=not.is.null', {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ image: null })
+  });
+}

@@ -699,6 +699,64 @@ function exportProducts() {
 }
 window.exportProducts = exportProducts;
 
+/* ---------- Delete All Images ---------- */
+/*
+   Wipes every photo off the live site: deletes every file sitting
+   in the product-images storage bucket, then clears the "image"
+   field on every product and every category tile so nothing points
+   at a now-deleted file. Nothing else is touched — no product,
+   name, price, category, or description is added, changed, or
+   removed. Products simply go back to showing their placeholder
+   icon instead of a photo, exactly like a brand-new product that
+   hasn't had a photo added yet.
+*/
+async function deleteAllImages(btn) {
+  const sure = confirm(
+    'Delete EVERY image on the site?\n\n' +
+    'This removes every uploaded photo from storage and clears the photo ' +
+    'off every product and every category tile. Products themselves are ' +
+    'NOT deleted — only their photos. This cannot be undone.'
+  );
+  if (!sure) return;
+
+  const originalLabel = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Deleting...';
+  }
+
+  try {
+    // 1) Delete the actual uploaded files from storage.
+    const files = await sbListAllImages();
+    if (files.length > 0) {
+      await sbDeleteImages(files);
+    }
+
+    // 2) Clear the image field on every product (products stay put).
+    await sbClearAllProductImages();
+
+    // 3) Clear category tile photos too, if that table exists yet.
+    try {
+      await sbClearAllCategoryImages();
+    } catch (e) {
+      console.warn('Skipped clearing category tile images (table may not exist yet).', e);
+    }
+
+    invalidateProductsCache();
+    await refreshProducts();
+
+    alert(`Done. Deleted ${files.length} uploaded photo${files.length === 1 ? '' : 's'} and cleared the photo field on every product. All products themselves are untouched.`);
+  } catch (err) {
+    alert('Could not delete all images.\n\n' + err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  }
+}
+window.deleteAllImages = deleteAllImages;
+
 /* ---------- Bulk upload (XLSX / CSV) ---------- */
 
 async function processBulkFile(file) {
