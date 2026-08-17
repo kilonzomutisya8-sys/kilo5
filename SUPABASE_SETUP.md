@@ -223,6 +223,23 @@ the site's code, not its data.
    Clicking a tile takes visitors to Shop already filtered to that
    category.
 
+## Adding the "Hide from site" feature (active column)
+
+If your `products` table was created before this feature was added,
+run this once in the SQL Editor (safe to run even if you're not sure —
+`if not exists` skips it if it's already there):
+
+```sql
+alter table products add column if not exists active boolean not null default true;
+```
+
+This adds a hidden on/off switch per product. Products with `active = false`
+are skipped by Home/Shop/About/Contact/Cart, but stay in your database
+untouched and still show up in Admin and in the Cleanup tool (marked as
+hidden) so you can bring them back any time. Nothing needs to change in
+your RLS policies — the existing "Public can write products" policy
+already covers updating this column.
+
 ## A note on security
 
 The key in `supabase.js` is a "publishable" key — safe to ship in

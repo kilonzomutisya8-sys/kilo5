@@ -59,7 +59,10 @@ function dbRowToProduct(row) {
     price: Number(row.price),
     originalPrice: row.original_price !== null && row.original_price !== undefined ? Number(row.original_price) : null,
     image: row.image || '',
-    description: row.description || ''
+    description: row.description || '',
+    // Defaults to true (visible) if the "active" column doesn't exist yet
+    // or is null, so nothing changes on sites that haven't added it.
+    active: row.active !== false
   };
 }
 
@@ -74,7 +77,8 @@ function productToDbRow(p) {
     price: p.price,
     original_price: (p.originalPrice === undefined || p.originalPrice === null || p.originalPrice === '') ? null : Number(p.originalPrice),
     image: p.image || null,
-    description: p.description || null
+    description: p.description || null,
+    active: p.active === false ? false : true
   };
 }
 
@@ -113,6 +117,30 @@ async function sbUpdateProduct(id, product) {
 
 async function sbDeleteProduct(id) {
   await sbRequest(`/products?id=eq.${id}`, { method: 'DELETE' });
+}
+
+// Flips the "active" (visible-on-site) flag on one product WITHOUT
+// touching anything else about it. Used by the Admin table's
+// Show/Hide button and by the Cleanup tool's "Hide" action.
+async function sbSetProductActive(id, active) {
+  await sbRequest(`/products?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ active: !!active })
+  });
+}
+
+// Same, but for many products at once (chunked, like deletes).
+async function sbSetProductsActive(ids, active) {
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    await sbRequest(`/products?id=in.(${chunk.join(',')})`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ active: !!active })
+    });
+  }
 }
 
 /* ---------- Site settings (e.g. show/hide prices) ---------- */

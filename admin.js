@@ -20,6 +20,57 @@ let selectedImageFile = null;
 let bulkPhotoFile = null;
 let bulkPhotoSelectedIds = new Set();
 
+/* ---------- Auto-hide rules for newly added products ---------- */
+// These mirror the default rules in cleanup-products.html. When a
+// brand-new product is added — via bulk upload or the Add Product
+// form — and it matches one of these, it's saved as hidden (active:
+// false) right away instead of appearing live for a moment first.
+// It never touches products that already exist. If you change the
+// rules in cleanup-products.html, update these lists to match so
+// new uploads get treated the same way.
+const AUTO_HIDE_KEEP_BRANDS = ['suzuki', 'mazda', 'mitsubishi', 'toyota', 'nissan', 'honda', 'subaru'];
+const AUTO_HIDE_OTHER_CAR_BRANDS = ['bmw', 'mercedes-benz', 'mercedes', 'audi', 'volkswagen', 'vw', 'ford', 'hyundai', 'kia', 'chevrolet', 'peugeot', 'renault', 'land rover', 'range rover', 'jeep', 'volvo', 'isuzu', 'daihatsu', 'mini', 'lexus', 'infiniti', 'acura', 'chrysler', 'dodge', 'fiat', 'skoda', 'seat', 'opel', 'citroen', 'jaguar', 'porsche', 'tesla', 'mg', 'proton', 'ssangyong'];
+const AUTO_HIDE_CATEGORIES = ['tyres', 'german parts', 'service kits'];
+const AUTO_HIDE_BRAND_KEYWORDS = ['liqui moly', 'liquimolly', 'liqui-moly'];
+
+// Whole-word / substring match, same approach as the cleanup tool —
+// "bmw" matches "BMW Genuine Parts" but not "minibus" matching "mini".
+function autoHideTextMatchesAny(textLower, list) {
+  return list.some(term => {
+    if (!term) return false;
+    if (textLower === term) return true;
+    const re = new RegExp('(^|[^a-z0-9])' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)', 'i');
+    return re.test(textLower);
+  });
+}
+
+// Returns a short human-readable reason if a brand-new product should
+// be auto-hidden on arrival, or null if it should stay visible.
+// Products with no brand set are never auto-hidden by the brand
+// rules — same "keep blank brand" protection the cleanup tool has.
+function getAutoHideReason(product) {
+  if (!product.name || !product.name.toString().trim()) return 'missing a product name';
+  if (product.price === null || product.price === undefined || isNaN(Number(product.price)) || Number(product.price) === 0) {
+    return 'missing or zero price';
+  }
+
+  const brandLower = (product.brand || '').trim().toLowerCase();
+  const categoryLower = (product.category || '').trim().toLowerCase();
+
+  if (brandLower) {
+    if (autoHideTextMatchesAny(brandLower, AUTO_HIDE_BRAND_KEYWORDS)) {
+      return `brand "${product.brand}" is on the always-hide brand list`;
+    }
+    if (!AUTO_HIDE_KEEP_BRANDS.includes(brandLower) && autoHideTextMatchesAny(brandLower, AUTO_HIDE_OTHER_CAR_BRANDS)) {
+      return `brand "${product.brand}" is a competing car brand`;
+    }
+  }
+  if (AUTO_HIDE_CATEGORIES.includes(categoryLower)) {
+    return `category "${product.category}" is on the always-hide category list`;
+  }
+  return null;
+}
+
 /* ---------- Login ---------- */
 
 function attemptLogin() {
@@ -208,7 +259,7 @@ function updateSubcategoryOptions() {
 async function refreshProducts() {
   invalidateProductsCache();
   try {
-    allProducts = await loadProducts();
+    allProducts = await loadAllProductsIncludingHidden();
   } catch (e) {
     alert('Could not load products from Supabase. Check your connection and supabase.js config.\n\n' + e.message);
     allProducts = [];
@@ -223,30 +274,52 @@ function renderTable() {
   const catFilter = document.getElementById('adminCategoryFilter').value;
 
   const filtered = allProducts.filter(p => {
+    if (p.active === false) return false; // hidden products never show in Admin
     const matchesCat = catFilter === 'all' || p.category === catFilter;
     const haystack = `${p.name} ${p.brand || ''}`.toLowerCase();
     return matchesCat && haystack.includes(search);
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-slate-500">No products found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-500">No products found.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(p => `
-    <tr class="hover:bg-slate-900/50">
+    <tr class="hover:bg-slate-900/50 ${p.active === false ? 'opacity-50' : ''}">
       <td class="px-4 py-3"><img src="${p.image || ''}" alt="${p.name}" class="w-12 h-12 rounded object-cover bg-slate-900 border border-slate-800" onerror="this.style.opacity=0.2"></td>
       <td class="px-4 py-3 text-white font-medium">${p.name}<div class="text-xs text-slate-500">${p.category}${p.subcategory ? ' &middot; ' + p.subcategory : ''}</div></td>
       <td class="px-4 py-3 text-slate-400">${p.brand || '—'}</td>
       <td class="px-4 py-3 text-slate-400">${p.category}</td>
       <td class="px-4 py-3 text-slate-200 font-semibold">${p.price.toLocaleString()}${p.originalPrice ? `<span class="text-slate-600 line-through ml-2 text-xs">${p.originalPrice.toLocaleString()}</span>` : ''}</td>
+      <td class="px-4 py-3">
+        ${p.active === false
+          ? '<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 px-2 py-1 rounded-full"><i class="fa-solid fa-eye-slash"></i> Hidden</span>'
+          : '<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-full"><i class="fa-solid fa-eye"></i> Visible</span>'}
+      </td>
       <td class="px-4 py-3 text-right whitespace-nowrap">
+        <button onclick="toggleProductActive(${p.id}, ${p.active === false})" class="text-slate-400 hover:text-white px-2" title="${p.active === false ? 'Show on site' : 'Hide from site'}"><i class="fa-solid ${p.active === false ? 'fa-eye' : 'fa-eye-slash'}"></i></button>
         <button onclick="openProductModal(${p.id})" class="text-slate-400 hover:text-white px-2" title="Edit"><i class="fa-solid fa-pen"></i></button>
         <button onclick="deleteProductClick(${p.id})" class="text-slate-400 hover:text-red-400 px-2" title="Delete"><i class="fa-solid fa-trash"></i></button>
       </td>
     </tr>
   `).join('');
 }
+
+// Flips a single product between visible and hidden. Hidden products
+// stay in Supabase exactly as they are — they just stop appearing on
+// Home/Shop/About/Contact/Cart until switched back.
+async function toggleProductActive(id, makeActive) {
+  try {
+    await sbSetProductActive(id, makeActive);
+    const p = allProducts.find(x => x.id === id);
+    if (p) p.active = makeActive;
+    renderTable();
+  } catch (err) {
+    alert('Could not update this product\'s visibility.\n\n' + err.message);
+  }
+}
+window.toggleProductActive = toggleProductActive;
 
 /* ---------- Add / Edit modal ---------- */
 
@@ -380,7 +453,17 @@ async function handleProductFormSubmit(e) {
         submitBtn.textContent = originalLabel;
         return;
       }
-      await sbInsertProduct(product);
+      const inserted = await sbInsertProduct(product);
+      const hideReason = getAutoHideReason(product);
+      if (hideReason) {
+        await sbSetProductActive(inserted.id, false);
+        closeProductModal();
+        await refreshProducts();
+        alert(`Saved — but this product matched your always-hide rules (${hideReason}), so it was saved hidden. It won't show on the live site or in this Admin list. Find and un-hide it from cleanup-products.html if that's not what you wanted.`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+        return;
+      }
     }
 
     closeProductModal();
@@ -995,11 +1078,17 @@ async function processBulkFile(file) {
 
     const toInsert = [];
     const toUpdate = [];
+    const autoHidden = [];
     toImport.forEach(product => {
       const existing = existingByName.get(product.name.trim().toLowerCase());
       if (existing) {
         toUpdate.push({ id: existing.id, product });
       } else {
+        const hideReason = getAutoHideReason(product);
+        if (hideReason) {
+          product.active = false;
+          autoHidden.push(`"${product.name}": ${hideReason}`);
+        }
         toInsert.push(product);
       }
     });
@@ -1013,6 +1102,10 @@ async function processBulkFile(file) {
     let msg = '';
     if (toInsert.length > 0) msg += `Added ${toInsert.length} new product${toInsert.length === 1 ? '' : 's'}.\n`;
     if (toUpdate.length > 0) msg += `Updated ${toUpdate.length} existing product${toUpdate.length === 1 ? '' : 's'} (matched by name) — no duplicates created.\n`;
+    if (autoHidden.length > 0) {
+      msg += `\n\n🙈 ${autoHidden.length} new product${autoHidden.length === 1 ? '' : 's'} matched your always-hide rules and ${autoHidden.length === 1 ? 'was' : 'were'} saved hidden (not shown on the live site or in this Admin list). Find and un-hide them from cleanup-products.html if any of these were wrong:\n` + autoHidden.slice(0, 15).join('\n');
+      if (autoHidden.length > 15) msg += `\n...and ${autoHidden.length - 15} more`;
+    }
     if (recategorized.length > 0) {
       msg += `\n\n⚠️ ${recategorized.length} row(s) had a Category that didn't match any existing category and were filed under "${defaultCategory}" instead:\n` + recategorized.slice(0, 15).join('\n');
       if (recategorized.length > 15) msg += `\n...and ${recategorized.length - 15} more`;

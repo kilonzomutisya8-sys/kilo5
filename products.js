@@ -143,7 +143,10 @@ async function loadProducts() {
 
   _productsPromise = Promise.all([sbGetProducts(), sbGetShowPrices()])
     .then(([products, showPrices]) => {
-      _productsCache = products.map(normalizeProductCategory);
+      // Visitor-facing pages never see products an admin has hidden
+      // (active === false) — they still exist in Supabase, they're
+      // just skipped here.
+      _productsCache = products.filter(p => p.active !== false).map(normalizeProductCategory);
       SHOW_PRICES = showPrices;
       return _productsCache;
     })
@@ -163,6 +166,14 @@ async function loadProducts() {
 function invalidateProductsCache() {
   _productsCache = null;
   _productsPromise = null;
+}
+
+// Admin-only loader: returns EVERY product, including ones hidden
+// from the public site (active === false), so staff can find and
+// un-hide them. Never cached, so Admin always sees the latest state.
+async function loadAllProductsIncludingHidden() {
+  const rows = await sbGetProducts();
+  return rows.map(normalizeProductCategory);
 }
 
 // Same caching pattern as loadProducts(), but for the homepage
