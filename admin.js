@@ -98,13 +98,13 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
   location.reload();
 });
 
-if (sessionStorage.getItem(ADMIN_SESSION_KEY) === '1') {
-  showDashboard();
-}
-
 /* ---------- Setup ---------- */
 
 let adminInitialized = false;
+
+if (sessionStorage.getItem(ADMIN_SESSION_KEY) === '1') {
+  showDashboard();
+}
 
 async function initAdmin() {
   populateCategorySelects();
