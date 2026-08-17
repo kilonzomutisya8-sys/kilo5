@@ -73,6 +73,9 @@
                 <button onclick="openBulkPhotoModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2">
                     <i class="fa-solid fa-images"></i> Bulk Photo to Selected Products
                 </button>
+                <button onclick="openBulkDeleteModal()" class="bg-rose-900 hover:bg-rose-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2" title="Search/filter products, tick as many as you like, and permanently delete them all at once">
+                    <i class="fa-solid fa-trash-can"></i> Bulk Delete Products
+                </button>
                 <button id="autoFixCatBtn" onclick="autoFixCategories(this)" class="bg-amber-700 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition inline-flex items-center gap-2" title="Scans every product and fixes any that ended up filed under the wrong category">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Auto-Fix Categories
                 </button>
@@ -274,6 +277,60 @@
                     <div class="flex gap-3 pt-2">
                         <button type="button" onclick="closeBulkPhotoModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-lg transition">Cancel</button>
                         <button type="button" id="bpApplyBtn" onclick="applyBulkPhoto()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition">Apply Photo</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Delete Products Modal -->
+    <div id="bulkDeleteModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeBulkDeleteModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-slate-950 border border-rose-900 rounded-xl w-full max-w-lg my-8">
+                <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-trash-can text-rose-500 mr-1"></i> Bulk Delete Products</h2>
+                    <button onclick="closeBulkDeleteModal()" class="text-slate-400 hover:text-white text-xl"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <p class="text-xs text-rose-300/80 bg-rose-500/10 border border-rose-500/30 rounded-lg p-3"><i class="fa-solid fa-triangle-exclamation mr-1"></i> This permanently deletes every product you tick below from the live site. It can't be undone. Use the filters just to narrow the list, then tick exactly which ones should go.</p>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Category</label>
+                            <select id="bdCategory" class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 outline-none transition">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Subcategory</label>
+                            <select id="bdSubcategory" class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 outline-none transition">
+                                <option value="all">All Subcategories</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Filter: Search</label>
+                        <input type="text" id="bdSearch" placeholder="Type a name or brand — e.g. 'Volkswagen' matches anything starting with those letters..." class="mt-1 w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Select Products to Delete</label>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="bulkDeleteSelectAllVisible()" class="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300">Select all shown</button>
+                                <span class="text-slate-700">|</span>
+                                <button type="button" onclick="bulkDeleteClearSelection()" class="text-[11px] font-semibold text-slate-400 hover:text-white">Clear selection</button>
+                            </div>
+                        </div>
+                        <div id="bdProductList" class="max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg divide-y divide-slate-800"></div>
+                        <p id="bdMatchCount" class="text-xs text-slate-500 min-h-[1rem] mt-2"></p>
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="closeBulkDeleteModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-lg transition">Cancel</button>
+                        <button type="button" id="bdDeleteBtn" onclick="applyBulkDelete()" class="flex-1 bg-rose-700 hover:bg-rose-600 text-white font-bold py-3 rounded-lg transition">Delete Selected</button>
                     </div>
                 </div>
             </div>

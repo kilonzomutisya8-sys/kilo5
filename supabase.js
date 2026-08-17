@@ -119,6 +119,21 @@ async function sbDeleteProduct(id) {
   await sbRequest(`/products?id=eq.${id}`, { method: 'DELETE' });
 }
 
+// Deletes many products at once, in chunks (PostgREST/URL length gets
+// unhappy with huge "in.()" lists, so this mirrors sbSetProductsActive
+// below and sends at most `chunkSize` ids per request). Used by the
+// Bulk Delete Products tool in Admin.
+async function sbDeleteProducts(ids) {
+  const chunkSize = 50;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    await sbRequest(`/products?id=in.(${chunk.join(',')})`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' }
+    });
+  }
+}
+
 // Flips the "active" (visible-on-site) flag on one product WITHOUT
 // touching anything else about it. Used by the Admin table's
 // Show/Hide button and by the Cleanup tool's "Hide" action.

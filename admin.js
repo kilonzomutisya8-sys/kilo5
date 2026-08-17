@@ -19,6 +19,7 @@ let allProducts = [];
 let selectedImageFile = null;
 let bulkPhotoFile = null;
 let bulkPhotoSelectedIds = new Set();
+let bulkDeleteSelectedIds = new Set();
 
 /* ---------- Auto-hide rules for newly added products ---------- */
 // These mirror the default rules in cleanup-products.html. When a
@@ -175,6 +176,18 @@ async function initAdmin() {
         return;
       }
     }
+  });
+
+  document.getElementById('bdCategory').addEventListener('change', updateBulkDeleteSubcategoryOptions);
+  document.getElementById('bdSubcategory').addEventListener('change', renderBulkDeleteProductList);
+  document.getElementById('bdSearch').addEventListener('input', renderBulkDeleteProductList);
+  document.getElementById('bdProductList').addEventListener('change', e => {
+    const checkbox = e.target.closest('input[type="checkbox"][data-product-id]');
+    if (!checkbox) return;
+    const id = Number(checkbox.dataset.productId);
+    if (checkbox.checked) bulkDeleteSelectedIds.add(id);
+    else bulkDeleteSelectedIds.delete(id);
+    updateBulkDeleteMatchCount();
   });
 
   if (!adminInitialized) {
@@ -684,6 +697,160 @@ async function applyBulkPhoto() {
   }
 }
 window.applyBulkPhoto = applyBulkPhoto;
+
+/* ---------- Bulk delete a hand-picked set of products ---------- */
+/*
+   Search/filter narrows the checklist below (e.g. typing "Volkswagen"
+   keeps anything whose name/brand starts with or contains those
+   letters, same as the main search box) — it does NOT delete by
+   itself. You still tick exactly which products should go, then hit
+   Delete Selected. Ticks persist while you keep narrowing/widening
+   the filters, so you can search "Volkswagen", tick a batch, clear
+   the search, search something else, and tick more before deleting
+   everything in one shot.
+*/
+
+function openBulkDeleteModal() {
+  bulkDeleteSelectedIds = new Set();
+  document.getElementById('bdSearch').value = '';
+  populateBulkDeleteCategorySelect();
+  updateBulkDeleteSubcategoryOptions();
+  document.getElementById('bulkDeleteModal').classList.remove('hidden');
+}
+window.openBulkDeleteModal = openBulkDeleteModal;
+
+function closeBulkDeleteModal() {
+  document.getElementById('bulkDeleteModal').classList.add('hidden');
+}
+window.closeBulkDeleteModal = closeBulkDeleteModal;
+
+function populateBulkDeleteCategorySelect() {
+  const select = document.getElementById('bdCategory');
+  if (select.dataset.populated) return;
+  CATEGORIES.forEach(cat => {
+    select.insertAdjacentHTML('beforeend', `<option value="${cat}">${cat}</option>`);
+  });
+  select.dataset.populated = '1';
+}
+
+// Built from subcategory values that actually exist on live products
+// right now, same approach as the Bulk Photo modal's subcategory list.
+function updateBulkDeleteSubcategoryOptions() {
+  const cat = document.getElementById('bdCategory').value;
+  const select = document.getElementById('bdSubcategory');
+
+  const subsSet = new Set();
+  allProducts.forEach(p => {
+    if (!p.subcategory) return;
+    if (cat !== 'all' && p.category !== cat) return;
+    subsSet.add(p.subcategory);
+  });
+  const subs = [...subsSet].sort();
+
+  select.innerHTML = '<option value="all">All Subcategories</option>' +
+    subs.map(s => `<option value="${s.replace(/"/g, '&quot;')}">${s}</option>`).join('');
+  renderBulkDeleteProductList();
+}
+
+// Products currently visible in the checklist based on the
+// Category / Subcategory / Search filters. The search box matches
+// anywhere in the name or brand (so "Volkswagen" matches "VW
+// Volkswagen Golf Wing Mirror" and "Genuine Volkswagen Oil Filter"
+// alike) — exactly like the main product table's search box.
+function bulkDeleteFilteredProducts() {
+  const cat = document.getElementById('bdCategory').value;
+  const sub = document.getElementById('bdSubcategory').value;
+  const q = document.getElementById('bdSearch').value.trim().toLowerCase();
+
+  return allProducts.filter(p => {
+    if (cat !== 'all' && p.category !== cat) return false;
+    if (sub !== 'all' && p.subcategory !== sub) return false;
+    if (q) {
+      const haystack = `${p.name} ${p.brand || ''}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// Renders the checklist of filtered products. Selection state
+// (bulkDeleteSelectedIds) persists across re-filtering, same as the
+// Bulk Photo modal — narrow, tick, narrow again, tick more.
+function renderBulkDeleteProductList() {
+  const listEl = document.getElementById('bdProductList');
+  const filtered = bulkDeleteFilteredProducts();
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<p class="text-xs text-slate-500 p-4 text-center">No products match these filters.</p>`;
+  } else {
+    listEl.innerHTML = filtered.map(p => `
+      <label class="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/60 cursor-pointer">
+        <input type="checkbox" data-product-id="${p.id}" ${bulkDeleteSelectedIds.has(p.id) ? 'checked' : ''} class="w-4 h-4 accent-rose-600 shrink-0">
+        <img src="${p.image || ''}" alt="" class="w-9 h-9 rounded object-cover bg-slate-800 border border-slate-700 shrink-0" onerror="this.style.opacity=0.2">
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs text-white truncate">${p.brand ? p.brand + ' — ' : ''}${p.name}</span>
+          <span class="block text-[11px] text-slate-500 truncate">${p.subcategory || p.category}</span>
+        </span>
+      </label>
+    `).join('');
+  }
+
+  updateBulkDeleteMatchCount();
+}
+
+function bulkDeleteSelectAllVisible() {
+  bulkDeleteFilteredProducts().forEach(p => bulkDeleteSelectedIds.add(p.id));
+  renderBulkDeleteProductList();
+}
+window.bulkDeleteSelectAllVisible = bulkDeleteSelectAllVisible;
+
+function bulkDeleteClearSelection() {
+  bulkDeleteSelectedIds.clear();
+  renderBulkDeleteProductList();
+}
+window.bulkDeleteClearSelection = bulkDeleteClearSelection;
+
+function bulkDeleteMatches() {
+  return allProducts.filter(p => bulkDeleteSelectedIds.has(p.id));
+}
+
+function updateBulkDeleteMatchCount() {
+  const countEl = document.getElementById('bdMatchCount');
+  const count = bulkDeleteSelectedIds.size;
+  countEl.textContent = count > 0
+    ? `This will permanently delete the ${count} product${count === 1 ? '' : 's'} you've selected.`
+    : 'Tick the products above that should be deleted.';
+}
+
+async function applyBulkDelete() {
+  const matches = bulkDeleteMatches();
+  if (matches.length === 0) { alert('Tick at least one product in the list first.'); return; }
+
+  const preview = matches.slice(0, 5).map(p => `• ${p.name}`).join('\n');
+  const more = matches.length > 5 ? `\n…and ${matches.length - 5} more` : '';
+  if (!confirm(`Permanently delete ${matches.length} selected product${matches.length === 1 ? '' : 's'}?\n\n${preview}${more}\n\nThis removes them from the live site immediately and can't be undone.`)) return;
+
+  const btn = document.getElementById('bdDeleteBtn');
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Deleting...';
+
+  try {
+    await sbDeleteProducts(matches.map(p => p.id));
+    await refreshProducts();
+    closeBulkDeleteModal();
+    alert(`Done — permanently deleted ${matches.length} selected product${matches.length === 1 ? '' : 's'}.`);
+  } catch (err) {
+    const hint = /401|403|permission|rls|policy/i.test(err.message)
+      ? '\n\nThis usually means the "Public can write products" policy (see SUPABASE_SETUP.md, step 1) hasn\'t been created on your products table yet — that policy is what allows deleting, not just adding/editing.'
+      : '';
+    alert('Could not delete the selected products.\n\n' + err.message + hint);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+window.applyBulkDelete = applyBulkDelete;
 
 /* ---------- Auto-Fix Categories ---------- */
 
