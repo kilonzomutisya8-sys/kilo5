@@ -45,10 +45,7 @@ const CATEGORY_STRUCTURE = {
     "Oil Pumps", "Oxygen Sensor", "Pulleys", "Radiator Cap", "Sensors",
     "Starter Motor", "Transmission Filters", "Turbo Valves", "Water Pumps"
   ],
-  "German Parts": ["BMW Parts", "Mercedes-Benz Parts", "Audi & VW Parts", "Porsche Parts"],
-  "Service Kits": ["German Cars", "Japanese Cars", "Korean Cars"],
-  "Car Batteries": ["12V Maintenance-Free Batteries", "Heavy-Duty Batteries", "DIN Standard Batteries", "Deep Cycle Batteries"],
-  "Tyres": ["Passenger Car Tyres", "SUV & 4x4 Tyres", "Van & Light Truck Tyres", "All-Season Tyres"]
+  "Car Batteries": ["12V Maintenance-Free Batteries", "Heavy-Duty Batteries", "DIN Standard Batteries", "Deep Cycle Batteries"]
 };
 
 const CATEGORIES = Object.keys(CATEGORY_STRUCTURE);
@@ -106,10 +103,7 @@ const CATEGORY_ICONS = {
   "Suspension Parts": "fa-solid fa-car-side",
   "Service Parts": "fa-solid fa-oil-can",
   "Engine Parts": "fa-solid fa-gears",
-  "German Parts": "fa-solid fa-flag",
-  "Service Kits": "fa-solid fa-toolbox",
-  "Car Batteries": "fa-solid fa-car-battery",
-  "Tyres": "fa-solid fa-circle-dot"
+  "Car Batteries": "fa-solid fa-car-battery"
 };
 
 // Fallback only — used if Supabase can't be reached (e.g. no
@@ -163,6 +157,56 @@ async function loadProducts() {
 function invalidateProductsCache() {
   _productsCache = null;
   _productsPromise = null;
+}
+
+/* ---------------------------------------------------------
+   Storefront exclusions
+   -----------------------------------------------------------
+   Products matching these rules stay in Supabase untouched —
+   Admin still sees and can manage them normally — but they are
+   filtered out of what Home/Shop show to visitors. Edit these
+   lists any time; no database changes needed.
+   --------------------------------------------------------- */
+const KEEP_CAR_BRANDS = [
+  'suzuki', 'mazda', 'mitsubishi', 'toyota', 'nissan', 'honda', 'subaru'
+];
+
+const EXCLUDED_CATEGORIES = ['tyres', 'german parts', 'service kits'];
+
+const EXCLUDED_BRAND_KEYWORDS = ['liqui moly', 'liquimolly', 'liqui-moly'];
+
+// Competing car-manufacturer brands (not generic parts brands like
+// Bosch/NGK/Sachs, which are left alone). Add/remove names as needed.
+const EXCLUDED_CAR_BRANDS = [
+  'bmw', 'mercedes-benz', 'mercedes', 'audi', 'volkswagen', 'vw', 'ford',
+  'hyundai', 'kia', 'chevrolet', 'peugeot', 'renault', 'land rover',
+  'range rover', 'jeep', 'volvo', 'isuzu', 'daihatsu', 'mini', 'lexus',
+  'infiniti', 'acura', 'chrysler', 'dodge', 'fiat', 'skoda', 'seat',
+  'opel', 'citroen', 'jaguar', 'porsche', 'tesla', 'mg', 'proton', 'ssangyong'
+];
+
+// Returns true if a product should be hidden from visitor-facing pages.
+// Products with no brand set are always shown, regardless of category.
+function isHiddenFromStorefront(product) {
+  const brandLower = (product.brand || '').trim().toLowerCase();
+  const categoryLower = (product.category || '').trim().toLowerCase();
+
+  if (!brandLower) return false; // no-brand products always stay visible
+
+  if (EXCLUDED_BRAND_KEYWORDS.some(k => brandLower.includes(k))) return true;
+  if (EXCLUDED_CATEGORIES.includes(categoryLower)) return true;
+  if (!KEEP_CAR_BRANDS.includes(brandLower) && EXCLUDED_CAR_BRANDS.includes(brandLower)) return true;
+
+  return false;
+}
+
+// Used by Home and Shop instead of loadProducts() directly — same
+// live data, minus anything matching the exclusion rules above.
+// Admin deliberately keeps using loadProducts() so staff can still
+// see and manage every product, including hidden ones.
+async function loadStorefrontProducts() {
+  const products = await loadProducts();
+  return products.filter(p => !isHiddenFromStorefront(p));
 }
 
 // Same caching pattern as loadProducts(), but for the homepage

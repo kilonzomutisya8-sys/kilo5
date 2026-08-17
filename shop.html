@@ -70,7 +70,7 @@
         }
 
         async function renderProducts() {
-            const products = await loadProducts();
+            const products = await loadStorefrontProducts();
             const productGrid = document.getElementById('productGrid');
             const summary = document.getElementById('resultsSummary');
 
