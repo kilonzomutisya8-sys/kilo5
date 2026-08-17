@@ -82,7 +82,7 @@
         }
 
         async function renderHomeProducts() {
-            const products = await loadStorefrontProducts();
+            const products = await loadProducts();
             document.getElementById('productGrid').innerHTML = products.slice(0, 12).map(renderProductCard).join('');
         }
 
