@@ -54,6 +54,10 @@ function dbRowToProduct(row) {
     id: row.id,
     name: row.name,
     brand: row.brand || '',
+    // Defaults to '' if the "part_number" column doesn't exist yet, so
+    // nothing breaks on a site that hasn't run the migration in
+    // SUPABASE_SETUP.md yet.
+    partNumber: row.part_number || '',
     category: row.category,
     subcategory: row.subcategory || '',
     price: Number(row.price),
@@ -72,6 +76,7 @@ function productToDbRow(p) {
   return {
     name: p.name,
     brand: p.brand || null,
+    part_number: p.partNumber || null,
     category: p.category,
     subcategory: p.subcategory || null,
     price: p.price,

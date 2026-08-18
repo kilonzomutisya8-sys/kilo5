@@ -110,6 +110,7 @@ async function initAdmin() {
   populateCategorySelects();
   document.getElementById('adminSearch').addEventListener('input', renderTable);
   document.getElementById('adminCategoryFilter').addEventListener('change', renderTable);
+  document.getElementById('miSearch').addEventListener('input', () => { miPage = 0; renderMissingImagesList(); });
   document.getElementById('pCategory').addEventListener('change', updateSubcategoryOptions);
   document.getElementById('pImageFile').addEventListener('change', handleImageFileChange);
   document.getElementById('pImageUrl').addEventListener('input', handleImageUrlChange);
@@ -301,7 +302,7 @@ function renderTable() {
   tbody.innerHTML = filtered.map(p => `
     <tr class="hover:bg-slate-900/50 ${p.active === false ? 'opacity-50' : ''}">
       <td class="px-4 py-3"><img src="${p.image || ''}" alt="${p.name}" class="w-12 h-12 rounded object-cover bg-slate-900 border border-slate-800" onerror="this.style.opacity=0.2"></td>
-      <td class="px-4 py-3 text-white font-medium">${p.name}<div class="text-xs text-slate-500">${p.category}${p.subcategory ? ' &middot; ' + p.subcategory : ''}</div></td>
+      <td class="px-4 py-3 text-white font-medium">${p.name}<div class="text-xs text-slate-500">${p.partNumber ? 'Part# ' + p.partNumber + ' &middot; ' : ''}${p.category}${p.subcategory ? ' &middot; ' + p.subcategory : ''}</div></td>
       <td class="px-4 py-3 text-slate-400">${p.brand || '—'}</td>
       <td class="px-4 py-3 text-slate-400">${p.category}</td>
       <td class="px-4 py-3 text-slate-200 font-semibold">${p.price.toLocaleString()}${p.originalPrice ? `<span class="text-slate-600 line-through ml-2 text-xs">${p.originalPrice.toLocaleString()}</span>` : ''}</td>
@@ -349,6 +350,7 @@ function openProductModal(id) {
     document.getElementById('modalTitle').textContent = 'Edit Product';
     document.getElementById('pId').value = p.id;
     document.getElementById('pName').value = p.name;
+    document.getElementById('pPartNumber').value = p.partNumber || '';
     document.getElementById('pBrand').value = p.brand || '';
     document.getElementById('pPrice').value = p.price;
     document.getElementById('pOriginalPrice').value = p.originalPrice || '';
@@ -440,6 +442,7 @@ async function handleProductFormSubmit(e) {
 
     const product = {
       name: document.getElementById('pName').value.trim(),
+      partNumber: document.getElementById('pPartNumber').value.trim(),
       brand: document.getElementById('pBrand').value.trim(),
       price: Number(document.getElementById('pPrice').value),
       originalPrice: originalPriceRaw === '' ? null : Number(originalPriceRaw),
@@ -514,6 +517,141 @@ async function deleteProductClick(id) {
   }
 }
 window.deleteProductClick = deleteProductClick;
+
+/* ---------- Find Missing Images ---------- */
+/*
+   Shows every visible-catalogue product that has no photo yet
+   (image is blank/null), so you can work through them and upload a
+   photo per product. Nothing here searches the internet automatically
+   — this is a fast manual-review queue: you find the right photo
+   yourself (manufacturer site, your own stock photo, distributor
+   catalogue, etc.), then upload or paste its URL right in the row.
+   Saving updates the product immediately and the row drops off the
+   list, so the list always reflects what's actually still missing.
+*/
+
+let miPage = 0;
+const MI_PAGE_SIZE = 50;
+
+function miGetMissingList() {
+  const q = (document.getElementById('miSearch').value || '').trim().toLowerCase();
+  return allProducts.filter(p => {
+    if (p.image && p.image.trim()) return false; // already has a photo
+    if (!q) return true;
+    const haystack = `${p.partNumber || ''} ${p.brand || ''} ${p.name || ''}`.toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+function openMissingImagesModal() {
+  miPage = 0;
+  document.getElementById('miSearch').value = '';
+  document.getElementById('missingImagesModal').classList.remove('hidden');
+  renderMissingImagesList();
+}
+window.openMissingImagesModal = openMissingImagesModal;
+
+function closeMissingImagesModal() {
+  document.getElementById('missingImagesModal').classList.add('hidden');
+}
+window.closeMissingImagesModal = closeMissingImagesModal;
+
+function renderMissingImagesList() {
+  const totalProducts = allProducts.length;
+  const missing = miGetMissingList();
+  const totalMissing = missing.length;
+
+  const start = miPage * MI_PAGE_SIZE;
+  const pageItems = missing.slice(start, start + MI_PAGE_SIZE);
+
+  const totalMissingUnfiltered = allProducts.filter(p => !p.image || !p.image.trim()).length;
+  document.getElementById('miProgressLabel').textContent =
+    `Searching: ${totalProducts - totalMissingUnfiltered} / ${totalProducts} products have a photo — ${totalMissingUnfiltered} still missing`;
+
+  const list = document.getElementById('miList');
+  if (pageItems.length === 0) {
+    list.innerHTML = `<div class="text-center py-10 text-slate-500 text-sm">${totalMissing === 0 ? 'Every product matching your search already has a photo. 🎉' : 'No matches.'}</div>`;
+  } else {
+    list.innerHTML = pageItems.map(p => `
+      <div class="p-3 flex items-center gap-3 bg-slate-950" data-mi-id="${p.id}">
+        <img src="" alt="" class="w-12 h-12 rounded object-cover bg-slate-900 border border-slate-800 shrink-0 mi-preview">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-white font-medium truncate">${p.name}</p>
+          <p class="text-xs text-slate-500 truncate">${p.partNumber ? 'Part# ' + p.partNumber + ' &middot; ' : ''}${p.brand ? p.brand + ' &middot; ' : ''}${p.category}</p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <label class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold px-3 py-2 rounded-lg transition cursor-pointer">
+            <i class="fa-solid fa-upload mr-1"></i> Upload
+            <input type="file" accept="image/*" class="hidden mi-file-input">
+          </label>
+          <input type="text" placeholder="or paste image URL" class="w-40 px-2 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:border-red-500 outline-none transition mi-url-input">
+          <button class="text-xs bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-3 py-2 rounded-lg transition mi-save-btn" disabled>Save</button>
+        </div>
+      </div>
+    `).join('');
+
+    pageItems.forEach(p => {
+      const row = list.querySelector(`[data-mi-id="${p.id}"]`);
+      const fileInput = row.querySelector('.mi-file-input');
+      const urlInput = row.querySelector('.mi-url-input');
+      const saveBtn = row.querySelector('.mi-save-btn');
+      const preview = row.querySelector('.mi-preview');
+      let pickedFile = null;
+
+      fileInput.addEventListener('change', () => {
+        pickedFile = fileInput.files[0] || null;
+        if (pickedFile) {
+          const reader = new FileReader();
+          reader.onload = ev => { preview.src = ev.target.result; };
+          reader.readAsDataURL(pickedFile);
+          saveBtn.disabled = false;
+        }
+      });
+      urlInput.addEventListener('input', () => {
+        if (pickedFile) return; // a picked file takes priority
+        const url = urlInput.value.trim();
+        saveBtn.disabled = !url;
+        if (url) preview.src = url;
+      });
+
+      saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        try {
+          let imageUrl = urlInput.value.trim();
+          if (pickedFile) imageUrl = await sbUploadImage(pickedFile);
+          await sbUpdateProduct(p.id, { ...p, image: imageUrl });
+          const local = allProducts.find(x => x.id === p.id);
+          if (local) local.image = imageUrl;
+          invalidateProductsCache();
+          renderTable();
+          renderMissingImagesList(); // row disappears from the list, counters update
+        } catch (err) {
+          alert('Could not save this photo.\n\n' + err.message);
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save';
+        }
+      });
+    });
+  }
+
+  document.getElementById('miPageLabel').textContent = totalMissing === 0
+    ? ''
+    : `Showing ${start + 1}\u2013${Math.min(start + MI_PAGE_SIZE, totalMissing)} of ${totalMissing}`;
+  document.getElementById('miPrevBtn').disabled = miPage === 0;
+  document.getElementById('miNextBtn').disabled = start + MI_PAGE_SIZE >= totalMissing;
+}
+
+function miPrevPage() {
+  if (miPage > 0) { miPage -= 1; renderMissingImagesList(); }
+}
+window.miPrevPage = miPrevPage;
+
+function miNextPage() {
+  miPage += 1;
+  renderMissingImagesList();
+}
+window.miNextPage = miNextPage;
 
 /* ---------- Bulk apply one photo to a whole subcategory ---------- */
 /*
@@ -1214,6 +1352,7 @@ async function processBulkFile(file) {
 
       toImport.push({
         name,
+        partNumber: getField(row, 'Part Number', 'PartNumber', 'Part No', 'PartNo', 'SKU', 'MPN', 'OE Number', 'OENumber'),
         brand: getField(row, 'Brand', 'Make', 'Manufacturer'),
         price,
         originalPrice: isNaN(originalPrice) ? null : originalPrice,

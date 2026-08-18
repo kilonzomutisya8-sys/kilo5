@@ -240,6 +240,23 @@ hidden) so you can bring them back any time. Nothing needs to change in
 your RLS policies — the existing "Public can write products" policy
 already covers updating this column.
 
+## Adding the "Part Number" field
+
+If your `products` table was created before this feature was added,
+run this once in the SQL Editor (safe to run even if you're not sure —
+`if not exists` skips it if it's already there):
+
+```sql
+alter table products add column if not exists part_number text;
+```
+
+This adds a dedicated Part Number field, separate from the product
+name — used by the Admin **Find Missing Images** tool so you can see
+each product's exact part number while you search for and upload its
+photo. Existing products will simply have a blank part number until
+you fill it in (via Edit Product, or a re-upload with a "Part Number"
+column in your XLSX/CSV — see the Bulk Upload help text in Admin).
+
 ## A note on security
 
 The key in `supabase.js` is a "publishable" key — safe to ship in
